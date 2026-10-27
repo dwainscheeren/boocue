@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="nl">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BooCue · UI development preview</title>
+<style>html,body{margin:0;height:100%;font-family:system-ui}boocue-panel{display:block;height:calc(100dvh - 28px);--boocue-height:calc(100dvh - 28px)}.preview-note{height:28px;box-sizing:border-box;padding:4px 16px;font-size:12px;background:#e7dfef;color:#382e42;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style>
+<div class="preview-note">UI-ontwikkelvoorbeeld · gesimuleerde lampen · geen verbinding met je apparaten</div>
+<boocue-panel></boocue-panel>
+<script type="module">
+import '/boocue_frontend/boocue-panel.js';
+const paths = await (await fetch('/dev/mdi-paths.json')).json();
+customElements.define('ha-icon', class extends HTMLElement {
+  connectedCallback() {
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width','100%');svg.setAttribute('height','100%');
+    const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[this.getAttribute('icon')]||paths['mdi:ghost']);path.setAttribute('fill','currentColor');svg.append(path);this.append(svg);
+  }
+});
+const pack=await (await fetch('/assets/pack.json')).json();
+const effects=pack.effects;
+const lights=[
+ {entity_id:'light.demo_porch',name:'Lantaarn bij de deur',state:'on',area:'Voordeur',color_modes:['hs']},
+ {entity_id:'light.demo_hall',name:'Lamp in de hal',state:'on',area:'Hal',color_modes:['hs']},
+ {entity_id:'light.demo_dimmer',name:'Leeslamp',state:'off',area:'Woonkamer',color_modes:['brightness']},
+ {entity_id:'light.demo_switch',name:'Tafellamp',state:'off',area:'Woonkamer',color_modes:['onoff']},
+];
+const runtime={lights:lights.slice(0,2).map(l=>l.entity_id),output:'browser',speakers:[],volume:.6,brightness:.8,speed:1,offset_ms:0,routing:'all',repeat:false,restore:true,interval_ms:250,audio_mode:"auto",duck_mood:.35};
+let settings={...runtime,enabled:true,favorites:[],mood:{...runtime,lights:[],repeat:true,volume:.3,effect_id:null},effect_routes:{},queues:[],motion_rules:[],automatic_enabled:false};
+const channels={effect:{playing:false},mood:{playing:false}},timers={},listeners=new Set();
+let station=null,queue={playing:false},queueTimer,stopSequence=0;
+const status=()=>({enabled:settings.enabled,stop_sequence:stopSequence,playing:queue.playing||Object.values(channels).some(c=>c.playing),channels:structuredClone(channels),queue:structuredClone(queue),browser_ready:!!station,browser_station_id:station,automatic_enabled:settings.automatic_enabled,motion:{}});
+function stopQueue(){clearTimeout(queueTimer);queue.playing=false;queue.waiting=null;}
+async function nextQueue(){
+ if(!queue.playing)return;
+ const q=queue.definition;
+ if(queue.remaining.length===0){if(!q.repeat&&queue.step){stopQueue();notify();return;}queue.remaining=q.effects.map((e,i)=>i);}
+ const candidates=queue.remaining.filter(i=>q.effects[i]!==queue.last);
+ const index=q.mode==='random'?(candidates.length?candidates:queue.remaining)[Math.floor(Math.random()*(candidates.length||queue.remaining.length))]:queue.remaining[0];
+ queue.remaining.splice(queue.remaining.indexOf(index),1);queue.index=index;queue.step++;queue.effect_id=q.effects[index];queue.last=queue.effect_id;queue.waiting=null;
+ const s={...settings,...q.settings,...settings.effect_routes[queue.effect_id],repeat:false};
+ await hass.callWS({type:'boocue/play',effect_id:queue.effect_id,settings:s,channel:'effect',browser_id:station,queue_run_id:queue.run_id});
+}
+function afterQueueItem(){
+ if(!queue.playing)return;
+ const q=queue.definition;if(!q.repeat&&!queue.remaining.length){stopQueue();notify();return;}
+ queue.waiting=q.advance==='motion'?'motion':'delay';
+ if(q.advance!=='motion')queueTimer=setTimeout(nextQueue,1000*(q.gap_min+Math.random()*(q.gap_max-q.gap_min)));
+ notify();
+}
+function updatePreview(){
+ for(const state of Object.values(channels)){
+  if(!state.playing)continue;
+  const e=effects.find(e=>e.id===state.effect_id),seconds=(Date.now()/1000-state.start_at)*state.speed;
+  const at=state.repeat?Math.max(0,seconds)%e.duration:seconds;
+  const cue=e.cues.filter(c=>c.at<=at).at(-1);
+  state.light_preview=cue?[{id:'preview',name:'',hue:cue.hue,saturation:cue.saturation,brightness:cue.brightness*state.brightness,active:true}]:[];
+ }
+}
+const notify=()=>{updatePreview();return listeners.forEach(fn=>fn({data:{...status(),server_time:Date.now()/1000}}));};
+const players=[{entity_id:'media_player.demo_hall',name:'Speaker in de hal',state:'idle',area:'Hal',supported_features:4612},{entity_id:'media_player.demo_garden',name:'Speaker buiten',state:'idle',area:'Tuin',supported_features:4612}];
+const sensors=[{entity_id:'binary_sensor.demo_motion',name:'Beweging voordeur',state:'off',area:'Voordeur',device_class:'motion'},{entity_id:'binary_sensor.demo_garden',name:'Beweging tuinpad',state:'off',area:'Tuin',device_class:'motion'}];
+const hass={locale:{language:'nl'},themes:{darkMode:true},
+ connection:{subscribeEvents:async fn=>{listeners.add(fn);return()=>listeners.delete(fn)}},
+ fetchWithAuth:async(url,options)=>fetch(url,options),
+ callWS:async msg=>{
+  if(msg.type==='boocue/get')return structuredClone({effects,settings,status:status(),entities:{lights,players,sensors},library_errors:[],server_time:Date.now()/1000});
+  if(msg.type==='boocue/settings'){settings={...settings,...structuredClone(msg.settings)};if(!settings.enabled){stopQueue();for(const c of Object.keys(channels)){clearInterval(timers[c]);channels[c].playing=false;}}notify();return structuredClone(settings)}
+  if(msg.type==='boocue/browser_ready'){station='preview-station';notify();return {station_id:station}}
+  if(msg.type==='boocue/browser_release'){station=null;stopQueue();for(const c of Object.keys(channels)){clearInterval(timers[c]);channels[c].playing=false;}notify();return;}
+  if(msg.type==='boocue/queue'){
+    if(msg.action==='stop'){if(!msg.run_id||queue.run_id===msg.run_id){stopQueue();clearInterval(timers.effect);channels.effect.playing=false;}notify();return structuredClone(queue);}
+    if(!settings.enabled)throw new Error('BooCue staat uit. Zet BooCue eerst aan.');
+    if(msg.action==='next'){clearTimeout(queueTimer);clearInterval(timers.effect);channels.effect.playing=false;await nextQueue();return structuredClone(queue);}
+    const q=settings.queues.find(q=>q.id===msg.queue_id);stopQueue();clearInterval(timers.effect);
+    queue={playing:true,run_id:crypto.randomUUID(),queue_id:q.id,name:q.name,definition:structuredClone(q),step:0,total:q.effects.length,remaining:[],browser_id:station};
+    await nextQueue();return structuredClone(queue);
+  }
+  if(msg.type==='boocue/audio')return {url:'/assets/'+effects.find(e=>e.id===msg.effect_id).audio};
+  if(msg.type==='boocue/play'){
+   if(!settings.enabled)throw new Error('BooCue staat uit. Zet BooCue eerst aan.');
+   const channel=msg.channel||'effect',e=effects.find(e=>e.id===msg.effect_id),s=msg.settings;
+   if(channel==='effect'&&!msg.queue_run_id)stopQueue();clearInterval(timers[channel]);channels[channel]={playing:true,channel,run_id:crypto.randomUUID(),effect_id:e.id,title:e.title,duration:e.duration,position:0,cycle:0,start_at:Date.now()/1000+.85,speed:s.speed,repeat:channel==='mood'||s.repeat,lights:s.lights,speakers:s.speakers,output:s.output,brightness:s.brightness,volume:s.volume,duck_mood:s.duck_mood,browser_id:msg.browser_id,queue_run_id:msg.queue_run_id,warnings:0};
+   notify();timers[channel]=setInterval(()=>{if(!channels[channel].repeat&&Date.now()/1000>channels[channel].start_at+e.duration){channels[channel].playing=false;clearInterval(timers[channel]);if(channel==='effect'&&channels[channel].queue_run_id)afterQueueItem();}notify()},250);
+   return {...structuredClone(channels[channel]),server_time:Date.now()/1000};
+  }
+  if(msg.type==='boocue/stop'){if((!msg.channel||msg.channel==='effect')&&!msg.run_id)stopQueue();for(const c of msg.channel?[msg.channel]:['effect','mood']){if(msg.run_id&&channels[c].run_id!==msg.run_id)continue;clearInterval(timers[c]);channels[c].playing=false;}if(!msg.channel&&!msg.run_id){settings.automatic_enabled=false;stopSequence++;}notify();return;}
+  throw new Error('Unsupported preview command');
+ }
+};
+await customElements.whenDefined('boocue-panel');
+document.querySelector('boocue-panel').hass=hass;
+</script>
+</html>

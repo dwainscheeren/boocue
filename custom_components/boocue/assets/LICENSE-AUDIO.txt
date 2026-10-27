@@ -1,0 +1,21 @@
+BooCue bundled sounds and light cues
+
+The eight original WAV recordings in audio/ and their cue sequences in
+pack.json are covered by BooCue's MIT license. Their effect entries have
+source "BooCue Originals" and license "MIT".
+
+The 60 MP3 recordings in audio/ (fx1.mp3 through fx48.mp3 and mood100.mp3
+through mood1200.mp3 in increments of 100) and the cue sequences for their
+hh-fx* and hh-mood* entries in pack.json are third-party assets. These are
+redistributed with permission and are provided for use with BooCue.
+
+Copyright remains with the respective rights holders. These third-party
+recordings and cue sequences are excluded from BooCue's MIT license.
+BooCue grants no additional license to these assets; the rights holders'
+permission and terms continue to apply. Do not assume permission to
+relicense these files or reuse them in other projects from the license on
+BooCue's code.
+
+BooCue's original editorial descriptions and icon selections remain under
+its MIT license. The third-party audio is unchanged; its cue data uses
+BooCue's format and user-selected light routing.

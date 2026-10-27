@@ -1,0 +1,182 @@
+play:
+  name: Play effect
+  description: Play an effect, or a continuous mood, with independent light and speaker choices.
+  fields:
+    effect_id:
+      name: Effect
+      description: Effect id from the BooCue library, for example thunder-roll.
+      required: true
+      example: thunder-roll
+      selector:
+        text:
+    channel:
+      name: Channel
+      description: Mood keeps repeating until stopped. Effect plays independently alongside it.
+      default: effect
+      selector:
+        select:
+          options:
+            - effect
+            - mood
+    if_idle:
+      name: Only when idle
+      description: Skip if this channel is already playing, useful for automation triggers.
+      default: false
+      selector:
+        boolean:
+    speakers:
+      name: Speakers
+      description: Speakers receiving the same clip. Compatible Sonos announcements can mix; other overlapping groups are rejected.
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+    lights:
+      name: Lights
+      description: Override the lights saved in BooCue.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    output:
+      name: Audio output
+      description: Use speakers for selected HA speakers, or none for lights only. Omit to use saved effect routing. Browser audio needs an explicitly enabled BooCue panel that stays open.
+      example: speakers
+      selector:
+        text:
+    volume:
+      name: Volume
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+    audio_mode:
+      name: Audio mixing
+      description: Auto permits compatible Sonos announcements over mood. Other players need separate destinations.
+      selector:
+        select:
+          options:
+            - auto
+            - separate
+    duck_mood:
+      name: Background level during effects
+      description: Browser atmosphere multiplier during foreground playback. 0.35 means 35% of the selected mood volume.
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.05
+    brightness:
+      name: Brightness scale
+      selector:
+        number:
+          min: 0.01
+          max: 1
+          step: 0.05
+    speed:
+      name: Playback speed
+      description: Supported with this device or light-only playback; HA speakers use normal speed.
+      selector:
+        number:
+          min: 0.5
+          max: 2
+          step: 0.1
+    offset_ms:
+      name: Light delay
+      description: Positive delays lights after sound; negative moves lights earlier.
+      selector:
+        number:
+          min: -2000
+          max: 2000
+          step: 50
+          unit_of_measurement: ms
+    interval_ms:
+      name: Light command interval
+      description: Increase for busy bridges or slow lamps.
+      selector:
+        number:
+          min: 100
+          max: 2000
+          step: 50
+          unit_of_measurement: ms
+    routing:
+      name: Light routing
+      selector:
+        select:
+          options:
+            - all
+            - alternate
+            - random
+    repeat:
+      name: Repeat
+      selector:
+        boolean:
+    restore:
+      name: Restore previous light states
+      selector:
+        boolean:
+stop:
+  name: Stop playback
+  description: Stop a channel, or stop both and disable motion rules when no channel is specified.
+  fields:
+    channel:
+      name: Channel
+      description: Omit to stop everything and disable automatic mode.
+      selector:
+        select:
+          options:
+            - effect
+            - mood
+set_automatic:
+  name: Enable motion rules
+  description: Arm or disarm the saved motion rules. Does not start or stop a mood.
+  fields:
+    enabled:
+      name: Enabled
+      required: true
+      selector:
+        boolean:
+
+queue_start:
+  name: Start queue
+  description: Start a saved queue from its first item. Its atmosphere continues independently.
+  fields:
+    queue_id:
+      name: Queue id
+      required: true
+      description: Saved queue id, visible on the BooCue queue sensor while running.
+      selector:
+        text:
+    settings:
+      name: Playback overrides
+      description: Optional runtime settings such as output, speakers, lights and volume; override saved queue and per-effect routes.
+      selector:
+        object:
+    if_idle:
+      name: Only when idle
+      description: Skip if a foreground effect or queue is already active.
+      default: false
+      selector:
+        boolean:
+queue_next:
+  name: Next queue item
+  description: Interrupt the current item or skip its pause. Starts the selected queue if idle.
+  fields:
+    queue_id:
+      name: Queue id
+      description: Optional for an active queue; required to start one while idle.
+      selector:
+        text:
+queue_stop:
+  name: Stop queue
+  description: Cancel the queue and its owned foreground item, leaving the atmosphere and motion armed state unchanged.
+set_enabled:
+  name: Enable BooCue
+  description: Master control. Off stops both channels and queues and blocks future starts. On enables playback without resuming an old show; the saved motion-armed state is retained.
+  fields:
+    enabled:
+      name: Enabled
+      required: true
+      selector:
+        boolean:

@@ -1,0 +1,8 @@
+BooCue code and original demo assets are covered by LICENSE (MIT).
+
+The 60 third-party MP3 recordings in assets/audio/ and their hh-fx* and
+hh-mood* cue sequences in assets/pack.json are excluded from that license.
+See assets/LICENSE-AUDIO.txt.
+
+Material Design Icons retain their upstream Apache License 2.0 terms and
+attribution. See brand/LICENSE.txt and brand/NOTICE.txt.

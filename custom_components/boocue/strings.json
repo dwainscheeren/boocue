@@ -1,0 +1,20 @@
+{
+  "title": "BooCue",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Welcome to BooCue",
+        "description": "Turn your lights and speakers into a playful spooky soundboard. Add BooCue, then open the ghost in the sidebar to choose your lights and play an effect.",
+        "data": {
+          "demo_lights": "Add four virtual demo lights"
+        },
+        "data_description": {
+          "demo_lights": "Try effects without controlling any physical lights."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "BooCue is already configured."
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "title": "BooCue",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Welkom bij BooCue",
+        "description": "Maak van je lampen en speakers een speels spooksoundboard. Voeg BooCue toe en open het spookje in de zijbalk om je lampen en een effect te kiezen.",
+        "data": {
+          "demo_lights": "Voeg vier virtuele demolampen toe"
+        },
+        "data_description": {
+          "demo_lights": "Probeer de effecten zonder echte lampen aan te sturen."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "BooCue is al ingesteld."
+    }
+  }
+}

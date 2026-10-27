@@ -1,0 +1,15 @@
+BooCue uses the ghost brand icon and semantic sound/control icons from
+Material Design Icons / Pictogrammers.
+Source: https://github.com/Templarian/MaterialDesign-SVG/blob/master/svg/ghost.svg
+Material Design Icons are licensed under the Apache License 2.0.
+Upstream license: https://github.com/Templarian/MaterialDesign-SVG/blob/master/LICENSE
+The icon's shape is retained; BooCue supplies the color treatment.
+
+The isolated development preview also bundles Material Design Icons path data
+from the @mdi/js package. The same upstream license and attribution apply.
+
+The 60 MP3 recordings in custom_components/boocue/assets/audio/ and their
+hh-fx* and hh-mood* cue sequences in assets/pack.json are third-party assets
+redistributed with permission. They are excluded from BooCue's MIT license.
+Their separate notice is assets/LICENSE-AUDIO.txt within the integration;
+BooCue grants no additional rights to those assets.

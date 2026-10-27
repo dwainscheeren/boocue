@@ -1,0 +1,39 @@
+name: Validate BooCue
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Test effect packs and scheduler
+        run: python -m unittest discover -s tests -v
+      - name: Validate Python syntax
+        run: python -m compileall -q custom_components tools
+      - name: Validate frontend syntax
+        run: |
+          node --input-type=module --check < custom_components/boocue/frontend/boocue-panel.js
+          node --check custom_components/boocue/frontend/boocue-card.js
+      - name: Test browser playback lifecycle
+        run: node --test tests/test_frontend.mjs tests/test_card.mjs
+      - name: Validate repository packaging
+        run: python tools/validate_repository.py
+  home-assistant-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check native HA playback, motion and capability mapping
+        run: >-
+          docker run --rm --entrypoint python
+          -v "${{ github.workspace }}:/repo:ro" -w /repo
+          ghcr.io/home-assistant/home-assistant:2026.8.0
+          -m unittest discover -s tests -v
