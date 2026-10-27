@@ -25,7 +25,7 @@ class ScareSpotsView {
     <label class="check-row"><input type="checkbox" data-sp-field="enabled" ${d.enabled?'checked':''}>${t.enabled}</label><details><summary>${t.automation}</summary><p>${t.spotId}: <code>${esc(d.id)}</code></p></details><div class="rule-actions"><button class="stop-button" data-sp-action="save">${t.save}</button><button class="secondary-button" data-sp-action="cancel">${t.cancel}</button></div></section>`:''}
    <div class="motion-rules spot-list">${this.spots.map(s=>`<article class="motion-rule scare-spot"><div><h3>${esc(s.name)}</h3><p>${s.settings.output==='none'?t.silent:s.settings.speakers.map(id=>esc(p._entities.players.find(e=>e.entity_id===id)?.name||id)).join(', ')} · ${s.settings.lights.map(id=>esc(p._entities.lights.find(e=>e.entity_id===id)?.name||id)).join(', ')||t.none}</p><p>${s.effects.length} ${s.effects.length===1?t.effectOne:t.effectMany} · ${s.sensors.length?`${s.sensors.length} ${s.sensors.length===1?t.sensorOne:t.sensorMany} · ${s.match==='all'?'AND':'OR'}`:t.manual}</p><p data-sp-status="${esc(s.id)}" role="status"></p><progress data-sp-progress="${esc(s.id)}" max="100" value="0" aria-label="${t.playing}: ${esc(s.name)}" hidden></progress></div><label class="check-row"><input type="checkbox" data-sp-enabled="${esc(s.id)}" ${s.enabled?'checked':''}>${t.enabled}</label><div class="rule-actions"><button class="stop-button" data-sp-action="play" data-sp-id="${esc(s.id)}" ${!s.enabled||p._settings.enabled===false?'disabled':''}>${icon('mdi:play')}${t.play}</button><button class="text-button" data-sp-action="stop" data-sp-id="${esc(s.id)}">${t.stop}</button><button class="text-button" data-sp-action="edit" data-sp-id="${esc(s.id)}">${t.edit}</button><button class="text-button" data-sp-action="remove" data-sp-id="${esc(s.id)}">${t.remove}</button></div></article>`).join('')||(!d?`<div class="empty"><h3>${t.empty}</h3><p>${t.emptyHelp}</p></div>`:'')}</div>
    ${this.spots.length?`<details class="spot-show advanced" open><summary>${t.loop}</summary><p class="field-help">${t.loopHelp}</p><label class="check-row"><input type="checkbox" data-sp-all ${this.useAll?'checked':''}>${t.useAll}</label>${!this.useAll?`<fieldset class="rule-pool"><legend>${t.chooseSpots}</legend><div class="rule-choices">${this.spots.filter(s=>s.enabled).map(s=>`<label class="check-row"><input type="checkbox" data-sp-show-spot="${esc(s.id)}" ${q.spot_ids.includes(s.id)?'checked':''}>${esc(s.name)}</label>`).join('')}</div></fieldset>`:''}<div class="rule-fields"><label>${t.spotOrder}<select data-sp-show="mode"><option value="random" ${q.mode==='random'?'selected':''}>${t.random}</option><option value="sequence" ${q.mode==='sequence'?'selected':''}>${t.sequence}</option></select></label><label class="check-row"><input type="checkbox" data-sp-show="repeat" ${q.repeat?'checked':''}>${t.repeat}</label><label>${t.gapMin}<input type="number" min="0" max="3600" data-sp-show="gap_min" value="${q.gap_min}"></label><label>${t.gapMax}<input type="number" min="0" max="3600" data-sp-show="gap_max" value="${q.gap_max}"></label></div><div class="rule-actions"><button class="secondary-button" data-sp-action="save-show">${t.saveLoop}</button><button class="stop-button" data-sp-action="show_start">${icon('mdi:play')}${t.startLoop}</button><button class="secondary-button" data-sp-action="show_stop">${t.stopLoop}</button></div></details>`:''}`;
-  this.updateStatus();p._restoreView(view,{focus,scroll});
+  p._syncEditor('spot',d,view);this.updateStatus();p._restoreView(view,{focus,scroll});
  }
  updateStatus(){
   const p=this.p;if(p._mode!=='spots')return;const t=this.t,root=p.shadowRoot;
@@ -40,7 +40,7 @@ class ScareSpotsView {
   const p=this.p,t=this.t,a=button.dataset.spAction,id=button.dataset.spId;
   if(a==='new'){const settings=p._resolved('','effect');this.draft={id:crypto.randomUUID(),name:'',enabled:true,effects:[],mode:'random',sensors:[],match:'any',cooldown:30,settings:{...settings,lights:[],speakers:[],output:'speakers',repeat:false,speed:1}};this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
   if(a==='edit'){this.draft=structuredClone(this.spots.find(s=>s.id===id));this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
-  if(a==='cancel'){this.draft=null;this.render({focus:'[data-sp-action="new"]'});return;}
+  if(a==='cancel'){p._cancelEditor();return;}
   if(a==='save'){const d=this.draft;if(!d.name.trim()||!d.effects.length||(d.settings.output==='speakers'?!d.settings.speakers.length:!d.settings.lights.length)){p._message(t.noEffects,true);return;}p._settings.scare_spots=this.spots.filter(s=>s.id!==d.id);p._settings.scare_spots.push(structuredClone(d));if(await p._save()){this.draft=null;p._message(t.saved);this.render({focus:`[data-sp-action="edit"][data-sp-id="${CSS.escape(d.id)}"]`});}return;}
   if(a==='remove'){this.deleted=structuredClone(this.spots.find(s=>s.id===id));const previous=structuredClone(p._settings.spot_show);p._settings.scare_spots=this.spots.filter(s=>s.id!==id);if(p._settings.spot_show)p._settings.spot_show.spot_ids=p._settings.spot_show.spot_ids.filter(s=>s!==id);if(await p._save()){this.showDraft=null;p._message(t.removed);const undo=document.createElement('button');undo.className='text-button';undo.dataset.spAction='undo';undo.textContent=t.undo;p.shadowRoot.getElementById('message').append(undo);this.draft=null;this.render();}else p._settings.spot_show=previous;return;}
   if(a==='undo'&&this.deleted){p._settings.scare_spots=[...this.spots,this.deleted];if(await p._save()){this.deleted=null;p.shadowRoot.getElementById('message').hidden=true;this.render();}return;}
@@ -234,6 +234,11 @@ function lightPosition(state,now,clockOffset=0) {
 
 const RUNTIME_KEYS = ['lights','output','speakers','volume','brightness','speed','offset_ms','routing','repeat','restore','interval_ms','audio_mode','duck_mood'];
 
+const EDITOR_TEXT = {
+  nl: {spot:['Nieuwe schrikplek','Schrikplek bewerken'],queue:['Nieuwe wachtrij','Wachtrij bewerken'],rule:['Nieuwe bewegingsregel','Bewegingsregel bewerken'],saving:'Opslaan…'},
+  en: {spot:['New scare spot','Edit scare spot'],queue:['New queue','Edit queue'],rule:['New motion rule','Edit motion rule'],saving:'Saving…'},
+};
+
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name) => `<ha-icon icon="${esc(name)}" aria-hidden="true"></ha-icon>`;
 const duration = seconds => `${Math.floor(Math.max(0, seconds) / 60)}:${String(Math.floor(Math.max(0, seconds) % 60)).padStart(2, '0')}`;
@@ -413,6 +418,61 @@ class BooCuePanel extends HTMLElement {
     if (app) app.dataset.theme = this._themePreference || (this._hass?.themes?.darkMode ? 'dark' : 'light');
   }
 
+  _syncEditor(kind,draft,view) {
+    const root=this.shadowRoot,form=root.querySelector('.library > .rule-editor');
+    let dialog=root.querySelector('.editor-dialog');
+    if(!draft||!form) {
+      if(dialog){dialog.close();dialog.remove();}
+      this._editor=null;
+      return;
+    }
+    const fresh=!dialog;
+    if(fresh) {
+      this._editor={kind,id:draft.id,returnFocus:view?.focus};
+      dialog=document.createElement('dialog');
+      dialog.className='editor-dialog';
+      dialog.setAttribute('aria-labelledby','editor-title');
+      dialog.setAttribute('aria-modal','true');
+      dialog.innerHTML=`<header class="editor-header"><h2 id="editor-title"></h2><button class="icon-button" data-action="close-editor" aria-label="${this.t.close}">${icon('mdi:close')}</button></header><p class="editor-error" role="alert" tabindex="-1" hidden></p><div class="editor-body"></div><footer class="editor-footer"><span class="editor-save-status" role="status"></span><div class="editor-actions"></div></footer>`;
+      dialog.addEventListener('cancel',event=>{event.preventDefault();this._cancelEditor();});
+      dialog.addEventListener('keydown',event=>{
+        if(event.key!=='Tab')return;
+        const controls=[...dialog.querySelectorAll('button,input,select,textarea,summary,a[href],[tabindex]')]
+          .filter(el=>!el.disabled&&el.tabIndex>=0&&!el.closest('[inert]')&&el.getClientRects().length);
+        const first=controls[0],last=controls.at(-1),active=root.activeElement;
+        if(event.shiftKey&&active===first){event.preventDefault();last?.focus();}
+        else if(!event.shiftKey&&active===last){event.preventDefault();first?.focus();}
+      });
+      root.querySelector('.app').append(dialog);
+    }
+    const items=kind==='spot'?this._settings.scare_spots:kind==='queue'?this._settings.queues:this._settings.motion_rules;
+    dialog.querySelector('#editor-title').textContent=EDITOR_TEXT[this._language][kind][items?.some(item=>item.id===draft.id)?1:0];
+    const actions=form.querySelector(':scope > .rule-actions');
+    dialog.querySelector('.editor-actions').replaceChildren(...[...actions.children].reverse());
+    actions.remove();
+    dialog.querySelector('.editor-body').replaceChildren(form);
+    this._setEditorBusy(!!this._editorSaveCount);
+    if(fresh)dialog.showModal();
+  }
+
+  _cancelEditor() {
+    if(!this._editor||this._editorSaveCount)return;
+    const {kind,returnFocus}=this._editor;
+    if(kind==='spot'){this._spotsView.draft=null;this._spotsView.render({focus:returnFocus||'[data-sp-action="new"]'});}
+    else if(kind==='queue'){this._queueDraft=null;this._renderQueues({focus:returnFocus||'[data-action="new-queue"]'});}
+    else {this._ruleDraft=null;this._renderAutomatic({focus:returnFocus||'[data-action="new-rule"]'});}
+  }
+
+  _setEditorBusy(busy) {
+    const dialog=this.shadowRoot.querySelector?.('.editor-dialog');
+    if(!dialog)return;
+    dialog.setAttribute('aria-busy',String(busy));
+    dialog.querySelector('.editor-body').inert=busy;
+    for(const button of dialog.querySelectorAll('.editor-header button,.editor-footer button'))button.disabled=busy;
+    dialog.querySelector('.editor-save-status').textContent=busy?EDITOR_TEXT[this._language].saving:'';
+    if(busy)dialog.querySelector('.editor-error').hidden=true;
+  }
+
   _renderLights() {
     const list = this.shadowRoot.getElementById('light-list');
     if (!list) return;
@@ -506,7 +566,7 @@ class BooCuePanel extends HTMLElement {
     const details=[...root.querySelectorAll('details')].map(el=>({key:this._disclosureKey(el),open:el.open,scroll:el.querySelector('.speaker-list')?.scrollTop}));
     return {focus:this._controlKey(active),selection:typeof active?.selectionStart==='number'?[active.selectionStart,active.selectionEnd]:null,
       scroll:workspace?.scrollTop||0,expanded:root.querySelector('.setup')?.classList.contains('expanded'),details,
-      scrollers:['.light-list','.rule-pool .rule-choices','.rule-lights .rule-choices','.sensor-picker .rule-choices','.rule-effect-choices','.queue-lights .rule-choices'].map(key=>({key,scroll:root.querySelector(key)?.scrollTop||0}))};
+      scrollers:['.editor-body','.light-list','.rule-pool .rule-choices','.rule-lights .rule-choices','.sensor-picker .rule-choices','.rule-effect-choices','.queue-lights .rule-choices'].map(key=>({key,scroll:root.querySelector(key)?.scrollTop||0}))};
   }
 
   _restoreView(view,{focus=null,scroll=null}={}) {
@@ -746,6 +806,8 @@ class BooCuePanel extends HTMLElement {
   }
 
   _message(text, error = false) {
+    const dialog=this.shadowRoot.querySelector?.('.editor-dialog');
+    if(error&&dialog?.open){const alert=dialog.querySelector('.editor-error');alert.textContent=text;alert.hidden=false;alert.focus({preventScroll:true});return;}
     const el = this.shadowRoot.getElementById('message');
     if (!el) return;
     el.hidden = false; el.classList.toggle('error', error);
@@ -757,16 +819,20 @@ class BooCuePanel extends HTMLElement {
 
   async _save() {
     const snapshot=structuredClone(this._settings),sequence=this._saveSequence=(this._saveSequence||0)+1;
+    const editorSave=!!this.shadowRoot.querySelector?.('.editor-dialog[open]');
+    if(editorSave){this._editorSaveCount=(this._editorSaveCount||0)+1;this._setEditorBusy(true);}
     const changes=Object.fromEntries(Object.entries(snapshot).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(this._savedSettings?.[key])));
     this._saveQueue=(this._saveQueue||Promise.resolve()).then(async()=>{
       try {const result=await this._hass.callWS({type:'boocue/settings',settings:changes});this._savedSettings=structuredClone(result);if(sequence===this._saveSequence)this._settings=result;return true;}
       catch(err){if(sequence===this._saveSequence)this._settings=structuredClone(this._savedSettings);this._message(String(err.message||err),true);return false;}
-    });return this._saveQueue;
+    });return this._saveQueue.finally(()=>{if(editorSave){this._editorSaveCount--;this._setEditorBusy(!!this._editorSaveCount);}});
   }
 
   async _onClick(event) {
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
+    if(button.dataset.action==='close-editor'){this._cancelEditor();return;}
+    if(this._editorSaveCount&&(button.dataset.spAction==='save'||['save-queue','save-rule'].includes(button.dataset.action)))return;
     if(button.dataset.spAction){await this._spotsView.click(button);return;}
     if(button.dataset.startQueue)return this._startQueue(button.dataset.startQueue);
     if(button.dataset.editQueue){this._queueDraft=structuredClone(this._settings.queues.find(q=>q.id===button.dataset.editQueue));this._renderQueues({focus:'[data-queue-field="name"]',scroll:'start'});return;}
@@ -788,7 +854,7 @@ class BooCuePanel extends HTMLElement {
       case 'browser-ready':try{await this._ensureBrowserStation();}catch(err){this._message(String(err.message||err),true);}break;
       case 'queue-next':case 'queue-stop':if(button.dataset.action==='queue-stop'){this._queueGeneration=(this._queueGeneration||0)+1;this._pending.delete('queue');}try{this._status.queue=await this._hass.callWS({type:'boocue/queue',action:button.dataset.action==='queue-next'?'next':'stop'});this._renderStatus();}catch(err){this._message(String(err.message||err),true);}break;
       case 'new-queue':this._queueDraft={id:crypto.randomUUID(),name:'',effects:[],mode:'sequence',advance:'auto',repeat:true,gap_min:4,gap_max:15,settings:{}};this._renderQueues({focus:'[data-queue-field="name"]',scroll:'start'});break;
-      case 'cancel-queue':{const id=this._queueDraft?.id;this._queueDraft=null;this._renderQueues({focus:this._settings.queues.some(q=>q.id===id)?`[data-edit-queue="${CSS.escape(id)}"]`:'[data-action="new-queue"]',scroll:'nearest'});break;}
+      case 'cancel-queue':this._cancelEditor();break;
       case 'add-queue-effect':{const id=this.shadowRoot.querySelector('[data-queue-add]').value;if(id&&this._queueDraft.effects.length<100){this._queueDraft.effects.push(id);this._renderQueues({focus:'[data-queue-add]'});}break;}
       case 'save-queue':{const q=this._queueDraft;if(!q.name.trim()||!q.effects.length){this._message(this.t.queueRequired,true);break;}const i=this._settings.queues.findIndex(item=>item.id===q.id);if(i<0)this._settings.queues.push(structuredClone(q));else this._settings.queues[i]=structuredClone(q);if(await this._save()){this._queueDraft=null;this._renderQueues({focus:`[data-edit-queue="${CSS.escape(q.id)}"]`,scroll:'nearest'});this._message(this.t.queueSaved);}break;}
       case 'menu': this.dispatchEvent(new Event('hass-toggle-menu', {bubbles:true, composed:true})); break;
@@ -826,7 +892,7 @@ class BooCuePanel extends HTMLElement {
         const settings=this._resolved('', 'effect');
         this._ruleDraft={...settings,id:crypto.randomUUID(),name:'',sensor:'',sensors:[],match:'any',action:'effect',queue_id:null,effects:[],cooldown:30,mode:'random',enabled:true};this._renderAutomatic({focus:'[data-rule-field="name"]',scroll:'start'});break;
       }
-      case 'cancel-rule':{const id=this._ruleDraft?.id;this._ruleDraft=null;this._renderAutomatic({focus:this._settings.motion_rules.some(r=>r.id===id)?`[data-edit-rule="${CSS.escape(id)}"]`:'[data-action="new-rule"]',scroll:'nearest'});break;}
+      case 'cancel-rule':this._cancelEditor();break;
       case 'save-rule': {
         const rule=this._ruleDraft;if(!rule.name.trim()||!rule.sensors?.length||(rule.action==='effect'?!rule.effects.length:!rule.queue_id)){this._message(this.t.ruleRequired,true);break;}
         const index=this._settings.motion_rules.findIndex(r=>r.id===rule.id);
@@ -868,7 +934,7 @@ class BooCuePanel extends HTMLElement {
       <label class="check-row"><input type="checkbox" data-rule-field="enabled" ${r.enabled?'checked':''}>${t.enabled}</label><div class="rule-actions"><button class="stop-button" data-action="save-rule">${t.saveRule}</button><button class="secondary-button" data-action="cancel-rule">${t.cancel}</button></div></section>`:''}
       <div class="motion-rules">${this._settings.motion_rules.length?this._settings.motion_rules.map(rule=>`<article class="motion-rule"><div><h3>${esc(rule.name)}</h3><p>${(rule.sensors||[rule.sensor]).length} ${t.sensors.toLowerCase()} · ${rule.match==='all'?'AND':'OR'} · ${rule.action==='effect'?`${rule.effects.length} ${t.effectMode.toLowerCase()}`:esc(this._settings.queues.find(q=>q.id===rule.queue_id)?.name||rule.queue_id)} · ${rule.cooldown}s</p><p data-rule-status="${esc(rule.id)}"></p></div><label class="check-row"><input type="checkbox" data-rule-enabled="${esc(rule.id)}" ${rule.enabled?'checked':''}>${t.enabled}</label><div class="rule-actions"><button class="text-button" data-edit-rule="${esc(rule.id)}">${t.edit}</button><button class="text-button" data-remove-rule="${esc(rule.id)}">${t.remove}</button></div></article>`).join(''):`<div class="empty" ${r?'hidden':''}><h3>${t.noRules}</h3><p>${t.noRulesHelp}</p></div>`}</div>
       <p class="automation-link"><a href="https://github.com/dwainscheeren/boocue/blob/main/docs/AUTOMATIONS.md" target="_blank" rel="noopener">${t.autoDocs}</a></p>`;
-    this._renderStatus();this._restoreView(view,{focus,scroll});
+    this._syncEditor('rule',r,view);this._renderStatus();this._restoreView(view,{focus,scroll});
   }
 
   _renderQueues({focus=null,scroll=null}={}) {
@@ -888,7 +954,7 @@ class BooCuePanel extends HTMLElement {
       <details class="queue-lights"><summary>${t.lights} · ${q.settings.lights.length} ${t.selected}</summary><div class="rule-choices">${this._entities.lights.map(l=>`<label class="check-row"><input type="checkbox" data-queue-light="${esc(l.entity_id)}" ${q.settings.lights.includes(l.entity_id)?'checked':''}>${esc(l.name)}</label>`).join('')}</div></details>`:''}</details>
       <div class="rule-actions"><button class="stop-button" data-action="save-queue">${t.saveQueue}</button><button class="secondary-button" data-action="cancel-queue">${t.cancel}</button></div></section>`:''}
       <div class="queue-list">${this._settings.queues.length?this._settings.queues.map(item=>`<article class="motion-rule" data-queue-row="${esc(item.id)}"><div><h3>${esc(item.name)}</h3><p>${item.effects.length} ${t.effectMode.toLowerCase()} · ${item.mode==='random'?t.random:t.sequence} · ${item.advance==='motion'?t.onMotion:`${item.gap_min}–${item.gap_max}s`}</p></div><div class="rule-actions"><button class="secondary-button" data-start-queue="${esc(item.id)}">${icon('mdi:play')}${t.startQueue}</button><button class="text-button" data-edit-queue="${esc(item.id)}">${t.edit}</button><button class="text-button" data-remove-queue="${esc(item.id)}">${t.remove}</button></div></article>`).join(''):`<div class="empty" ${q?'hidden':''}><h3>${t.noQueues}</h3><p>${t.noQueuesHelp}</p></div>`}</div>`;
-    this._renderStatus();this._restoreView(view,{focus,scroll});
+    this._syncEditor('queue',q,view);this._renderStatus();this._restoreView(view,{focus,scroll});
   }
 
   async _ensureBrowserStation() {

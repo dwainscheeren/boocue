@@ -1027,6 +1027,38 @@ progress::-moz-progress-bar{
 .auto-arm{margin:24px 0 28px;padding:0 0 20px;border-bottom:1px solid var(--bc-line)}
 .auto-arm p{margin:6px 0 0 26px;font-size:12px;color:var(--bc-muted)}
 .rule-editor{padding:0 0 28px;margin-bottom:28px;border-bottom:1px solid var(--bc-line)}
+.editor-dialog{
+  width:min(850px,calc(100vw - 48px));max-width:none;max-height:calc(100dvh - 48px);
+  padding:0;border:0;border-radius:16px;background:var(--bc-surface);color:var(--bc-ink);
+  box-shadow:0 20px 64px rgb(0 0 0 / .3);overflow:hidden;
+}
+.editor-dialog[open]{display:flex;flex-direction:column}
+.editor-dialog::backdrop{background:rgb(15 10 22 / .65)}
+.editor-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 28px;border-bottom:1px solid var(--bc-line);flex-shrink:0}
+.editor-header h2{margin:0;font-size:21px;line-height:1.3;overflow-wrap:anywhere}
+.editor-header .icon-button{flex-shrink:0}
+.editor-body{overflow:auto;overscroll-behavior:contain;padding:8px 28px 24px;min-height:0;scrollbar-color:var(--bc-line) var(--bc-surface);scrollbar-gutter:stable}
+.editor-body>.rule-editor{padding:0;margin:0;border:0}
+.editor-body .rule-choices{max-height:220px;overscroll-behavior:contain;scrollbar-color:var(--bc-line) var(--bc-surface)}
+.editor-body .spot-choices{grid-template-columns:repeat(2,minmax(0,1fr))}
+.editor-body .rule-fields>.rule-pool .spot-choices{grid-template-columns:1fr}
+.editor-body .check-row{min-height:44px}
+.editor-footer{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:12px 20px;padding:16px 28px;border-top:1px solid var(--bc-line);flex-shrink:0;background:var(--bc-surface)}
+.editor-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.editor-actions>button{min-height:44px;min-width:120px}
+.editor-save-status{margin-right:auto;font-size:13px;color:var(--bc-muted)}
+.editor-error{margin:16px 28px 0;padding:12px 14px;background:var(--bc-error-bg);color:var(--bc-error);border-radius:8px;font-size:14px;overflow-wrap:anywhere;flex-shrink:0}
+@media(max-width:600px){
+  .editor-dialog{width:100%;height:100dvh;max-height:100dvh;margin:0;border-radius:0}
+  .editor-header{padding:16px 18px}
+  .editor-header h2{font-size:19px}
+  .editor-body{padding:4px 18px 20px}
+  .editor-footer{padding:12px 18px max(12px,env(safe-area-inset-bottom));gap:8px}
+  .editor-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}
+  .editor-actions>button{min-width:0}
+  .editor-error{margin:12px 18px 0}
+  .editor-body .spot-choices{grid-template-columns:1fr}
+}
 .rule-fields{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:18px 0}
 .rule-editor label{font-size:13px;color:var(--bc-ink)}
 .rule-editor label>input:not([type="checkbox"]),.rule-editor label>select{display:block;width:100%;margin-top:8px}

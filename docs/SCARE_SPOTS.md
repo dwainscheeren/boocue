@@ -22,12 +22,14 @@ flowchart LR
 ## Set up a haunted house
 
 1. Open **Mood**, choose the background atmosphere and select its general speaker(s). Start it independently. Leave its light selection empty if it should only provide background sound.
-2. Open **Scare spots → New scare spot**. Name it, for example, **Clown**.
+2. Open **Scare spots → New scare spot**. The editor opens in a dialog (full screen on phones). Name it, for example, **Clown**.
 3. Select the speaker(s) and lights physically beside the clown. Choose one or more foreground effects and random or fixed-order effect selection. Set this spot's volume and brightness.
 4. Optionally select its motion sensor(s), OR/AND matching and cooldown, then save the spot.
 5. Repeat for **Witch**, **Ghost** or other locations. Use the Play button to trigger a saved spot, or **Random spot** to choose an available enabled location.
 
 A spot uses HA speakers or lights only. Browser audio remains available for the ordinary mood/effect channels; physical spots and their loops do not need an open browser.
+
+**Edit** opens the same dialog for an existing spot. **Cancel**, the close button or Escape discards the draft and returns to the list. Save errors stay in the dialog so you can correct or retry without losing your changes. Queues and motion rules use the same editor behavior.
 
 Spot settings override per-effect speaker routes so that an effect always stays with the selected prop's own lights and speakers. An effect pool can be shared by several spots without changing where each spot plays.
 

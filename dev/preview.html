@@ -7,13 +7,13 @@
 <div class="preview-note">UI-ontwikkelvoorbeeld · gesimuleerde lampen · geen verbinding met je apparaten</div>
 <boocue-panel></boocue-panel>
 <script type="module">
-import '/boocue_frontend/boocue-panel.js';
+import '/boocue_frontend/boocue-panel.js?build=preview-1.1.2';
 const paths = await (await fetch('/dev/mdi-paths.json')).json();
 customElements.define('ha-icon', class extends HTMLElement {
   connectedCallback() {
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('width','100%');svg.setAttribute('height','100%');
-    const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[this.getAttribute('icon')]||paths['mdi:ghost']);path.setAttribute('fill','currentColor');svg.append(path);this.append(svg);
+    const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[this.getAttribute('icon')]||paths['mdi:ghost']);path.setAttribute('fill','currentColor');svg.append(path);this.replaceChildren(svg);
   }
 });
 const pack=await (await fetch('/assets/pack.json')).json();

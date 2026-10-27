@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+- Create and edit scare spots, queues and motion rules in focused dialogs with a fixed action bar.
+- Full-screen editors on phones, keyboard focus containment and Escape/Cancel return to the original list action.
+- Keep validation and save errors inside the editor; retain draft changes for retry after a connection failure.
+
 ## 1.1.1
 
 - Keep audio and the remaining light timeline running when a lamp temporarily disconnects or times out. Failed light commands appear as playback warnings.

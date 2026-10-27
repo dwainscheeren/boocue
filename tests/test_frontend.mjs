@@ -219,3 +219,30 @@ test('stopping one pending spot does not cancel a different spot',async()=>{
  assert.equal(calls.filter(c=>c.action==='stop'&&c.run_id==='run'&&c.spot_id==='clown').length,1);
  assert.equal(calls.filter(c=>c.action==='stop'&&c.spot_id==='witch').length,0);
 });
+
+for(const kind of ['spot','queue','rule'])test(`cancelling a ${kind} editor discards only its draft and returns to its trigger`,()=>{
+ const {p,calls}=fixture(),rendered=[];
+ p._editor={kind,returnFocus:'[data-original-trigger]'};
+ p._spotsView.draft={id:'spot-draft'};p._queueDraft={id:'queue-draft'};p._ruleDraft={id:'rule-draft'};
+ p._spotsView.render=options=>rendered.push(options);p._renderQueues=options=>rendered.push(options);p._renderAutomatic=options=>rendered.push(options);
+ p._cancelEditor();
+ assert.equal(kind==='spot'?p._spotsView.draft:kind==='queue'?p._queueDraft:p._ruleDraft,null);
+ assert.equal(kind==='spot'?p._queueDraft.id:p._spotsView.draft.id,kind==='spot'?'queue-draft':'spot-draft');
+ assert.equal(rendered.length,1);assert.equal(rendered[0].focus,'[data-original-trigger]');
+ assert.equal(calls.length,0);
+});
+
+test('a failed editor save keeps the draft, blocks dismissal while pending and unlocks for retry',async()=>{
+ const {p,calls}=fixture(),busy=[],errors=[];let reject;
+ const request=new Promise((resolve,no)=>{reject=no;});
+ p._savedSettings=structuredClone(p._settings);p._settings.queues=[{id:'edited',name:'Changed'}];
+ p._queueDraft={id:'edited',name:'Changed'};p._editor={kind:'queue'};
+ p.shadowRoot={querySelector:()=>({open:true})};p._setEditorBusy=value=>busy.push(value);p._message=m=>errors.push(m);
+ p._hass.callWS=async msg=>{calls.push(msg);return request;};
+ const save=registry.get('boocue-panel').prototype._save.call(p);
+ p._cancelEditor();assert.equal(p._queueDraft.name,'Changed');assert.equal(p._editorSaveCount,1);
+ await Promise.resolve();reject(Error('Connection lost'));assert.equal(await save,false);
+ assert.equal(p._editorSaveCount,0);assert.equal(p._queueDraft.name,'Changed');
+ assert.equal(p._settings.queues.length,0);assert.deepEqual(busy,[true,false]);assert.deepEqual(errors,['Connection lost']);
+ assert.deepEqual(Object.keys(calls[0].settings),['queues']);
+});
