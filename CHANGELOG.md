@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1
+
+- Keep audio and the remaining light timeline running when a lamp temporarily disconnects or times out. Failed light commands appear as playback warnings.
+- Document Twinkly command pacing and UltimateSensor speaker compatibility.
+
 ## 1.1.0
 
 - Named scare spots with paired speakers, lights and individual effect pools.

@@ -142,6 +142,38 @@ class PlaybackTests(PlaybackFixture):
         self.assertEqual(self.c.channels['effect']['warnings'],1)
         self.assertIsNone(self.c.channels['effect']['error'])
 
+    async def test_transient_light_network_error_skips_a_cue_without_aborting_audio(self):
+        from aiohttp import ServerDisconnectedError
+        original_call = self.hass.services.async_call
+        originals = {key: self.states[key] for key in ['light.a', 'light.b']}
+        for error in [ServerDisconnectedError('Server disconnected'), TimeoutError()]:
+            with self.subTest(error=type(error).__name__):
+                attempts = []
+                self.calls.clear()
+
+                async def flaky(domain, action, data, **kwargs):
+                    if domain == 'light':
+                        attempts.append(deepcopy(data))
+                        if len(attempts) == 1:
+                            raise error
+                    return await original_call(domain, action, data, **kwargs)
+
+                self.hass.services.async_call = flaky
+                with patch.object(self.module, 'START_DELAY_SECONDS', .01):
+                    await self.c.async_play('fx', {'lights': ['light.a', 'light.b'],
+                        'output': 'speakers', 'speakers': ['media_player.two'], 'interval_ms': 100})
+                await self.c._runs['effect'].task
+                state = self.c.channels['effect']
+                self.assertIsNone(state['error'])
+                self.assertEqual(state['position'], self.c.effects['fx'].duration)
+                self.assertEqual(state['warnings'], 1)
+                self.assertGreater(len(attempts), 2)
+                self.assertTrue(any(data.get('hs_color', [0])[0] == 210 for data in attempts))
+                self.assertEqual(self.played(), ['media_player.two'])
+                self.assertEqual(self.states['media_player.two'].attributes['volume_level'], .4)
+                for key, value in originals.items():
+                    self.assertEqual(self.states[key], value)
+
     async def test_per_effect_route_and_legacy_output_migrate_without_losing_settings(self):
         settings=self.module.validate_settings({'output':'media_player.one','favorites':['fx']},self.c.settings,set(self.c.effects))
         self.assertEqual(settings['output'],'speakers');self.assertEqual(settings['speakers'],['media_player.one'])

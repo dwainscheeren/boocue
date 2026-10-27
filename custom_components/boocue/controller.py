@@ -14,6 +14,7 @@ import random
 import time
 import uuid
 
+from aiohttp import ClientError
 from homeassistant.components.http.auth import async_sign_path
 from homeassistant.components.media_player.const import MediaPlayerEntityFeature as MP
 from homeassistant.core import Context, HomeAssistant, callback
@@ -624,7 +625,10 @@ class BooCueController:
             try:
                 await self.hass.services.async_call("light", action,
                     {"entity_id": targets, **json.loads(serialized)}, blocking=True, context=run.context)
-            except HomeAssistantError:
+            except (HomeAssistantError, ClientError, TimeoutError):
+                # Some light integrations expose transport errors directly. Drop
+                # this cue; the absolute-time scheduler will use the latest next
+                # cue without interrupting audio or replaying missed flashes.
                 self._warn(run, "Een lichtcommando kon niet worden uitgevoerd")
 
     async def _remote_audio(self, run):
