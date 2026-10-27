@@ -136,6 +136,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                  schema=vol.Schema({vol.Required("enabled"): cv.boolean}))
     hass.services.async_register(DOMAIN, 'set_enabled', enabled,
                                  schema=vol.Schema({vol.Required('enabled'): cv.boolean}))
+    async def spot_play(call):
+        await require_admin(call)
+        try:return await c.spots.trigger(call.data.get('spot_id'),call.context)
+        except (ValueError,TypeError) as err:raise HomeAssistantError(str(err)) from err
+
+    async def spot_stop(call):
+        await require_admin(call)
+        if call.data.get('spot_id'):await c.spots.stop_spot(call.data['spot_id'])
+        else:await c.spots.stop_all()
+
+    async def spot_show_start(call):
+        await require_admin(call)
+        try:return await c.spots.start_show(call.context)
+        except (ValueError,TypeError) as err:raise HomeAssistantError(str(err)) from err
+
+    async def spot_show_stop(call):
+        await require_admin(call)
+        await c.spots.stop_show()
+
+    hass.services.async_register(DOMAIN,'spot_play',spot_play,schema=vol.Schema({vol.Optional('spot_id'):cv.string}),supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN,'spot_stop',spot_stop,schema=vol.Schema({vol.Optional('spot_id'):cv.string}))
+    hass.services.async_register(DOMAIN,'spot_show_start',spot_show_start,schema=vol.Schema({}),supports_response=SupportsResponse.OPTIONAL)
+    hass.services.async_register(DOMAIN,'spot_show_stop',spot_show_stop,schema=vol.Schema({}))
     platforms = ['sensor', 'switch', 'button', 'binary_sensor'] + (['light'] if entry.data.get('demo_lights') else [])
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     return True
@@ -149,7 +172,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
     frontend.async_remove_panel(hass, "boocue")
     remove_card_module(hass, hass.data[DOMAIN])
-    for service in ["play", "stop", "set_automatic", 'set_enabled', "queue_start", "queue_next", "queue_stop"]:
+    for service in ["play", "stop", "set_automatic", 'set_enabled', "queue_start", "queue_next", "queue_stop", "spot_play", "spot_stop", "spot_show_start", "spot_show_stop"]:
         hass.services.async_remove(DOMAIN, service)
     hass.data[DOMAIN].pop("controller", None)
     return True

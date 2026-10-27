@@ -173,10 +173,33 @@ queue_stop:
   description: Cancel the queue and its owned foreground item, leaving the atmosphere and motion armed state unchanged.
 set_enabled:
   name: Enable BooCue
-  description: Master control. Off stops both channels and queues and blocks future starts. On enables playback without resuming an old show; the saved motion-armed state is retained.
+  description: Master control. Off stops mood, effects, scare spots and loops and blocks future starts. On enables playback without resuming an old show; the saved motion-armed state is retained.
   fields:
     enabled:
       name: Enabled
       required: true
       selector:
         boolean:
+spot_play:
+  name: Play scare spot
+  description: Play an effect at the named spot using its paired lights and speakers. Omit the id to choose a random available enabled spot. Background mood keeps playing.
+  fields:
+    spot_id:
+      name: Scare spot id
+      description: Copy the id from the spot editor. Optional for a random spot.
+      selector:
+        text:
+spot_stop:
+  name: Stop scare spots
+  description: Stop one named spot, or all spots and the spot loop when no id is supplied. The background mood and motion arming are unchanged.
+  fields:
+    spot_id:
+      name: Scare spot id
+      selector:
+        text:
+spot_show_start:
+  name: Start scare spot loop
+  description: Rotate through the selected spots in fixed order or shuffle, with the saved pauses and repeat setting. In parallel mode, other spots can also react to motion.
+spot_show_stop:
+  name: Stop scare spot loop
+  description: Stop the loop and its current owned effect. Independent motion-triggered spots and background mood keep playing.

@@ -16,7 +16,7 @@ class BooCuePlaybackSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_icon = 'mdi:ghost'
-    _unrecorded_attributes = frozenset({'position', 'cycle', 'channels', 'motion', 'light_preview', 'server_time'})
+    _unrecorded_attributes = frozenset({'position', 'cycle', 'channels', 'motion', 'light_preview', 'server_time', 'scare_spots', 'spot_show'})
 
     def __init__(self, controller, entry_id, channel=None):
         self.controller, self.channel = controller, channel

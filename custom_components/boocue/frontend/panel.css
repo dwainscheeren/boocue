@@ -1136,3 +1136,24 @@ progress::-moz-progress-bar{
 .master-power[aria-pressed="true"]{color:var(--bc-accent);background:var(--bc-selected);border-color:var(--bc-accent)}
 .master-disabled{margin:0;padding:12px 36px;background:var(--bc-inset);color:var(--bc-ink);border-bottom:1px solid var(--bc-line);font-size:13px;line-height:1.5}
 @media(max-width:760px){.browser-station{display:flex;flex-wrap:wrap;gap:4px 12px}.browser-station .field-help{flex-basis:100%;margin:0 0 3px}.master-power{font-size:12px;padding:7px 9px}.master-disabled{padding:10px 18px}}
+
+/* Scare spots preserve the panel's existing form and transport vocabulary. */
+.spot-controls{display:flex;align-items:end;gap:24px;flex-wrap:wrap;margin-top:24px}
+.spot-controls>label:first-child{min-width:240px;flex:1}
+.spot-transport{margin:18px 0 24px;align-items:center}
+.spot-transport>[role="status"]{color:var(--bc-muted)}
+.spot-editor .spot-choices{max-height:230px;overflow:auto}
+.spot-choices label>span{display:grid;gap:2px}
+.spot-choices small{color:var(--bc-muted);font-size:12px}
+.scare-spot{align-items:start}
+.scare-spot>.rule-actions{flex-wrap:wrap}
+.spot-show{margin-top:32px}
+.spot-show>p{margin:12px 0}
+.spot-show>.rule-fields{margin:18px 0}
+@media(max-width:700px){.spot-controls{gap:16px}.spot-controls>label:first-child{min-width:0;width:100%}.scare-spot{flex-direction:column;align-items:stretch}.scare-spot>.rule-actions{gap:8px}}
+
+.spot-controls>label:not(.check-row),.spot-show .rule-fields>label:not(.check-row){display:grid;gap:8px}
+.spot-controls select,.spot-show select,.spot-show input[type="number"]{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--bc-line);border-radius:8px;background:var(--bc-inset);color:var(--bc-ink);font:inherit}
+.spot-controls>label:first-child{max-width:420px}
+.scare-spot>div:first-child{min-width:0;overflow-wrap:anywhere}
+@media(max-width:700px){.spot-controls>label:first-child{flex:1 0 100%;max-width:none}.spot-controls>.check-row{min-height:44px}}

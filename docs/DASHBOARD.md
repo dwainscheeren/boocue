@@ -4,7 +4,7 @@ The integration includes `custom:boocue-card`: master power, continuous mood, fo
 
 ## Add the card
 
-1. Install BooCue 1.0.0 or newer and restart Home Assistant.
+1. Install BooCue 1.1.0 or newer and restart Home Assistant.
 2. Refresh the browser page. The integration registers the card module automatically; no separate HACS frontend repository is needed.
 3. Edit a dashboard, choose **Add card**, search for **BooCue**, and save.
 
@@ -16,7 +16,7 @@ type: custom:boocue-card
 
 The graphical editor exposes title, theme, default selections, visible sections and optional output overrides per channel. A Home Assistant administrator is required, matching the existing BooCue panel/actions. The card supports native sections and masonry layouts and adapts to narrow dashboard columns.
 
-If the card is missing after an update, fully refresh the page. As a fallback, add a **JavaScript module** dashboard resource with URL `/boocue_frontend/boocue-card.js?v=1.0.0`, then refresh again. Do not copy the card into `www` separately: it updates with the integration.
+If the card is missing after an update, fully refresh the page. As a fallback, add a **JavaScript module** dashboard resource with URL `/boocue_frontend/boocue-card.js?v=1.1.0`, then refresh again. Do not copy the card into `www` separately: it updates with the integration.
 
 ## Operation
 

@@ -24,7 +24,8 @@ class BooCueActive(BinarySensorEntity):
 
     @property
     def is_on(self):
-        return any(state['playing'] for state in self.controller.channels.values()) or self.controller.queues.status['playing']
+        return (any(state['playing'] for state in self.controller.channels.values())
+                or self.controller.queues.status['playing'] or self.controller.spots.show_status['playing'])
 
     async def async_added_to_hass(self):
         self.async_on_remove(self.hass.bus.async_listen(EVENT_STATE, self._updated))

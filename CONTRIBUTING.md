@@ -47,7 +47,7 @@ Keep both themes, narrow dashboard columns, keyboard focus, pending/disabled sta
 All bundled sounds live in `assets/audio/`, described by the shared `assets/pack.json` catalog. Regenerate the eight original demos with `python3 tools/generate_demos.py`; the other recordings, cue definitions and asset-license metadata are preserved. See [ASSETS.md](ASSETS.md) for their terms. Keep installation-specific packs, credentials and local work files out of commits. Add third-party media only with permission and a notice that describes its distribution terms; the code's MIT license does not cover it automatically.
 
 ```sh
-python3 tools/package_release.py dist/boocue-v1.0.0.zip
+python3 tools/package_release.py dist/boocue-v1.1.0.zip
 ```
 
 The archive contains the `boocue/` integration folder and is accompanied by a SHA-256 file. Check the manifest version, archive layout and included assets before creating a release. Preserve upstream copyright and license notices.

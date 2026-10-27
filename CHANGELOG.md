@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0
+
+- Named scare spots with paired speakers, lights and individual effect pools.
+- One-at-a-time or parallel playback, with shared-device conflict protection.
+- Per-spot motion sensors, OR/AND matching and independent cooldowns.
+- Ordered/shuffled location loops, separate stops and HA actions.
+- Shared mood lights resume after spot effects; background audio remains independent.
+
 ## 1.0.0
 
 - Sound-and-light panel and Lovelace dashboard card for Home Assistant.

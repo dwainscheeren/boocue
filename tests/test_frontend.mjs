@@ -6,7 +6,7 @@ const registry=new Map();
 const defaults={lights:[],output:'browser',speakers:[],volume:.6,brightness:.8,speed:1,offset_ms:0,routing:'all',repeat:false,restore:true,interval_ms:250,audio_mode:'auto',duck_mood:.35};
 const context=vm.createContext({HTMLElement:class{attachShadow(){this.shadowRoot={};}},localStorage:{getItem:()=>null},
   URL,customElements:{get:n=>registry.get(n),define:(n,c)=>registry.set(n,c)},Map,Set,structuredClone,Date,Math,performance,Promise});
-vm.runInContext(fs.readFileSync(new URL('../custom_components/boocue/frontend/boocue-panel.js',import.meta.url),'utf8').replaceAll('import.meta.url',JSON.stringify('http://ha.test/boocue-panel.js?build=test')),context);
+vm.runInContext(fs.readFileSync(new URL('../custom_components/boocue/frontend/boocue-panel.js',import.meta.url),'utf8').replace(/^import .*?;\n/,'').replaceAll('import.meta.url',JSON.stringify('http://ha.test/boocue-panel.js?build=test')),context);
 function fixture(){
  const p=new (registry.get('boocue-panel'))();
  p._settings={...structuredClone(defaults),favorites:[],effect_routes:{},motion_rules:[],queues:[],automatic_enabled:false,mood:{...structuredClone(defaults),repeat:true,volume:.3}};
@@ -157,4 +157,65 @@ test('master toggle sends only its flag and ignores duplicate presses while pend
  const first=p._togglePower();await p._togglePower();assert.equal(calls.length,1);
  assert.deepEqual(Object.keys(calls[0].settings),['enabled']);assert.equal(calls[0].settings.enabled,false);
  d.resolve({enabled:false,automatic_enabled:false});await first;assert.equal(p._settings.enabled,false);
+});
+test('scare spots use HA routing without claiming browser audio or altering mood targets',async()=>{
+ const {p,calls}=fixture();const mood=structuredClone(p._settings.mood);await p._spotsView.command('play','clown');
+ assert.deepEqual(JSON.parse(JSON.stringify(calls[0])),{type:'boocue/spot',action:'play',spot_id:'clown'});
+ assert.equal(calls.some(c=>c.type==='boocue/browser_ready'),false);assert.deepEqual(p._settings.mood,mood);assert.equal(p._sources.size,0);
+});
+test('a late scare-spot start is cancelled by run id after remote Stop all',async()=>{
+ const {p,calls}=fixture(),d=deferred(),entered=deferred();
+ p._stopSequence=1;p._settings.enabled=true;
+ p._hass.callWS=async msg=>{calls.push(msg);if(msg.type==='boocue/spot'&&msg.action==='play'){entered.resolve();return d.promise;}};
+ const pending=p._spotsView.command('play','clown');await entered.promise;p._applyControlState({stop_sequence:2,enabled:true});
+ d.resolve({playing:true,run_id:'stale',spot_id:'clown'});await pending;
+ assert.equal(calls.at(-1).action,'stop');assert.equal(calls.at(-1).spot_id,'clown');assert.equal(calls.at(-1).run_id,'stale');
+});
+test('pending scare-spot presses are deduplicated per spot while different spots remain independent',async()=>{
+ const {p,calls}=fixture(),d=deferred();p._hass.callWS=async msg=>{calls.push(msg);return d.promise;};
+ const a=p._spotsView.command('play','clown');const duplicate=p._spotsView.command('play','clown');const b=p._spotsView.command('play','witch');
+ await duplicate;assert.equal(calls.length,2);d.resolve({playing:true,run_id:'test'});await Promise.all([a,b]);
+});
+test('stopping a pending spot loop cancels only the stale returned loop',async()=>{
+ const {p,calls}=fixture(),d=deferred(),entered=deferred();
+ p._hass.callWS=async msg=>{calls.push(msg);if(msg.action==='show_start'){entered.resolve();return d.promise;}};
+ const pending=p._spotsView.command('show_start');await entered.promise;await p._spotsView.command('show_stop');
+ d.resolve({playing:true,run_id:'old-loop'});await pending;
+ assert.equal(calls.at(-1).action,'show_stop');assert.equal(calls.at(-1).run_id,'old-loop');
+});
+test('an explicitly empty loop selection cannot silently start all spots',async()=>{
+ const {p}=fixture();const messages=[];p._message=m=>messages.push(m);p._spotsView.showDraft={spot_ids:[],mode:'random',repeat:true,gap_min:4,gap_max:15};p._spotsView.useAll=false;
+ assert.equal(await p._spotsView.saveShow(),false);assert.equal(messages.length,1);assert.equal(p._settings.spot_show,undefined);
+});
+test('a hass value assigned before element upgrade reaches the reactive setter',()=>{
+ const values=new Map(),hass={locale:{language:'en'}};
+ const isolated=vm.createContext({HTMLElement:class{constructor(){Object.defineProperty(this,'hass',{value:hass,writable:true,configurable:true});}attachShadow(){this.shadowRoot={};}},localStorage:{getItem:()=>null},URL,customElements:{get:n=>values.get(n),define:(n,c)=>values.set(n,c)},Map,Set,structuredClone,Date,Math,performance,Promise,Object});
+ vm.runInContext(fs.readFileSync(new URL('../custom_components/boocue/frontend/boocue-panel.js',import.meta.url),'utf8').replace(/^import .*?;\n/,'').replaceAll('import.meta.url',JSON.stringify('http://ha.test/boocue-panel.js?build=test')),isolated);
+ const panel=new (values.get('boocue-panel'))();assert.equal(panel._hass,hass);assert.equal(Object.hasOwn(panel,'hass'),false);assert.equal(panel._language,'en');
+});
+for(const stop of ['global','stop_all','show_stop','master_off'])test(`a delayed loop-settings save cannot start after ${stop}`,async()=>{
+ const {p,calls}=fixture(),save=deferred(),entered=deferred();p._settings.enabled=true;p._stopSequence=3;
+ p._spotsView.saveShow=async()=>{entered.resolve();return save.promise;};
+ const pending=p._spotsView.click({dataset:{spAction:'show_start'}});await entered.promise;
+ if(stop==='global')p._applyControlState({enabled:true,stop_sequence:4});
+ else if(stop==='master_off')p._applyControlState({enabled:false});
+ else await p._spotsView.command(stop);
+ save.resolve(true);await pending;assert.equal(calls.some(c=>c.action==='show_start'),false);
+});
+test('changing loop scope preserves the checkbox focus and explicit selection',async()=>{
+ const {p}=fixture();p._settings.scare_spots=[{id:'clown',enabled:true}];p._spotsView.initShow();let focus;
+ p._spotsView.render=options=>focus=options.focus;
+ await p._spotsView.change({dataset:{spAll:''},checked:false,hasAttribute:name=>name==='data-sp-all'});
+ assert.equal(focus,'[data-sp-all]');assert.equal(p._spotsView.useAll,false);assert.equal(p._spotsView.showDraft.spot_ids[0],'clown');
+});
+test('explicit loop selections discard disabled spots without falling back to every spot',async()=>{
+ const {p}=fixture();p._settings.scare_spots=[{id:'clown',enabled:false},{id:'witch',enabled:true}];p._spotsView.showDraft={spot_ids:['clown','witch'],mode:'random',repeat:true,gap_min:4,gap_max:15};p._spotsView.useAll=false;
+ assert.equal(await p._spotsView.saveShow(),true);assert.equal(p._settings.spot_show.spot_ids.length,1);assert.equal(p._settings.spot_show.spot_ids[0],'witch');
+});
+test('stopping one pending spot does not cancel a different spot',async()=>{
+ const {p,calls}=fixture(),d=deferred();p._hass.callWS=async msg=>{calls.push(msg);if(msg.action==='play')return d.promise;};
+ const a=p._spotsView.command('play','clown'),b=p._spotsView.command('play','witch');await p._spotsView.command('stop','clown');
+ d.resolve({playing:true,run_id:'run'});await Promise.all([a,b]);
+ assert.equal(calls.filter(c=>c.action==='stop'&&c.run_id==='run'&&c.spot_id==='clown').length,1);
+ assert.equal(calls.filter(c=>c.action==='stop'&&c.spot_id==='witch').length,0);
 });

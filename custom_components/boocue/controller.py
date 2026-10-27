@@ -30,6 +30,7 @@ from .library import load_library
 from .models import Cue, number
 from .sequence import validate_queues
 from .queue_manager import QueueManager
+from .spots import SpotManager, validate_spots, validate_spot_show
 
 LOGGER = logging.getLogger(__name__)
 COLOR_MODES = {"hs", "rgb", "rgbw", "rgbww", "xy"}
@@ -101,6 +102,11 @@ def validate_settings(raw: dict, current: dict, effect_ids: set[str]) -> dict:
     if not isinstance(result["automatic_enabled"], bool):
         raise ValueError("Automatisch moet aan of uit zijn")
     result["queues"] = validate_queues(result["queues"], effect_ids, validate_runtime, {k: result[k] for k in RUNTIME_KEYS})
+    result["scare_spots"] = validate_spots(result["scare_spots"], effect_ids, validate_runtime,
+                                         entity_list, {k: result[k] for k in RUNTIME_KEYS})
+    if result["spot_concurrency"] not in {"single", "parallel"}:
+        raise ValueError("Kies één schrikplek tegelijk of meerdere tegelijk")
+    result["spot_show"] = validate_spot_show(result["spot_show"], {s["id"] for s in result["scare_spots"]})
     queue_ids = {q["id"] for q in result["queues"]}
     rules = result["motion_rules"]
     if not isinstance(rules, list) or len(rules) > 20:
@@ -267,30 +273,33 @@ class BooCueController:
         self._closed = False
         self._browser_station = None
         self.queues = QueueManager(self)
+        self.spots = SpotManager(self)
 
     @property
     def status(self):
         channels = deepcopy(self.channels)
-        foreground = self._runs.get('effect')
+        foreground_lights = {p for r in self._runs.values() if r.channel != 'mood' for p in r.lights}
         for name, run in self._runs.items():
             samples = []
             for entity_id, cue in run.desired.items():
                 state = self.hass.states.get(entity_id)
                 if state and state.state not in {'unknown', 'unavailable'}:
-                    active = not (name == 'mood' and foreground and entity_id in foreground.lights)
+                    active = not (name == 'mood' and entity_id in foreground_lights)
                     samples.append(preview_light(state, cue, run.settings['brightness'], active))
             if not run.lights and run.preview_cue:
                 cue = run.preview_cue
                 samples = [{'id': 'cue', 'name': '', 'hue': cue.hue, 'saturation': cue.saturation,
                             'brightness': cue.brightness * run.settings['brightness'], 'active': True}]
             channels[name].update(light_preview=samples, preview_kind='commands' if run.lights else 'timeline')
-        active = next((self.channels[c] for c in CHANNELS if self.channels[c]["playing"]),
+        priority = [c for c in self.channels if c != 'mood'] + ['mood']
+        active = next((self.channels[c] for c in priority if self.channels[c]["playing"]),
                       next((self.channels[c] for c in CHANNELS if self.channels[c].get("error")), self.channels["effect"]))
-        return {**active, "playing": any(s["playing"] for s in self.channels.values()) or self.queues.status["playing"],
+        return {**active, "playing": any(s["playing"] for s in self.channels.values()) or self.queues.status["playing"] or self.spots.show_status['playing'],
                 "channels": channels, "enabled": self.settings['enabled'], "automatic_enabled": self.settings["automatic_enabled"],
                 "motion": deepcopy(self._auto_events), "queue": deepcopy(self.queues.status),
                 "stop_sequence": self._stop_sequence,
                 "settings_revision": self._settings_revision, "library_revision": self._library_revision,
+                "scare_spots": self.spots.status(), "spot_show": deepcopy(self.spots.show_status),
                 "browser_ready": bool(self._browser_station), "browser_station_id": self.browser_id}
 
     async def async_load(self):
@@ -327,6 +336,7 @@ class BooCueController:
             await self.async_stop(disarm=False)
         if self.queues.run and self.queues.run.definition['id'] not in {q['id'] for q in self.settings['queues']}:
             await self.queues.stop()
+        await self.spots.settings_changed()
         self._notify()
         return deepcopy(self.settings)
 
@@ -367,6 +377,8 @@ class BooCueController:
     def _bind_motion(self):
         if self._motion_unsub:self._motion_unsub();self._motion_unsub=None
         sensors={sensor for r in self.settings['motion_rules'] if r['enabled'] for sensor in r['sensors']} if self.settings['enabled'] else set()
+        if self.settings['enabled']:
+            sensors.update(sensor for spot in self.settings['scare_spots'] if spot['enabled'] for sensor in spot['sensors'])
         if sensors and not self._closed:
             self._motion_unsub=async_track_state_change_event(self.hass,sensors,self._motion_changed)
 
@@ -374,6 +386,12 @@ class BooCueController:
     def _motion_changed(self,event):
         old,new=event.data.get('old_state'),event.data.get('new_state')
         if not self.settings['enabled'] or not self.settings['automatic_enabled'] or not old or not new or old.state!='off' or new.state!='on' or self._closed:return
+        for spot in self.settings['scare_spots']:
+            if not spot['enabled'] or new.entity_id not in spot['sensors']:continue
+            states=[new if sensor==new.entity_id else self.hass.states.get(sensor) for sensor in spot['sensors']]
+            if spot['match']=='all' and not all(s and s.state=='on' for s in states):continue
+            task=self.hass.async_create_task(self.spots.trigger(spot['id'],event.context,source='motion'),'BooCue scare spot motion')
+            self._motion_tasks.add(task);task.add_done_callback(self._motion_tasks.discard)
         for rule in self.settings['motion_rules']:
             if not rule['enabled'] or new.entity_id not in rule['sensors']:continue
             if rule['match']=='all':
@@ -433,14 +451,17 @@ class BooCueController:
         await self._cleanup_locked(run)
 
     async def async_stop(self, expected_run_id=None, *, channel=None, disarm=False, include_queue=True):
-        if channel is not None and channel not in CHANNELS:
+        if channel is not None and channel not in self.channels:
             raise ValueError("Kies effect of mood")
+        if channel is None and not expected_run_id:
+            self.spots.invalidate_pending()
+            await self.spots.stop_show(stop_effect=False)
         if disarm and not expected_run_id:
             await self.async_save_settings({"automatic_enabled": False})
         if include_queue and channel in {None,'effect'} and not expected_run_id:
             await self.queues.stop()
         async with self._lock:
-            for name in ([channel] if channel else CHANNELS):
+            for name in ([channel] if channel else list(self.channels)):
                 if expected_run_id and self.channels[name].get("run_id") != expected_run_id:
                     continue
                 await self._stop_locked(name)
@@ -464,11 +485,14 @@ class BooCueController:
         return values
 
     def prepare_playback(self,effect_id,settings,channel,browser_id=None,browser=False):
-        if channel not in CHANNELS or effect_id not in self.effects:
+        spot = next((s for s in self.settings['scare_spots'] if channel=='spot:'+s['id'] and s['enabled']), None)
+        if (channel not in CHANNELS and not spot) or effect_id not in self.effects:
             raise ValueError("Kies een bestaand effect en kanaal")
         effect = self.effects[effect_id]
         if channel == "mood" and effect.category != "moods":
             raise ValueError("Kies een sfeereffect voor de doorlopende sfeer")
+        if spot and effect.category == 'moods':
+            raise ValueError("Kies losse effecten voor een schrikplek; sfeer speelt op het eigen kanaal")
         settings = validate_runtime(settings)
         lights = expand_lights(self.hass, settings["lights"])
         output = settings["output"]
@@ -503,39 +527,60 @@ class BooCueController:
         return effect,settings,lights,players,resources,audio_base
 
     def check_audio_overlap(self,channel,players,resources,settings):
-        other = self._runs.get("mood" if channel == "effect" else "effect")
-        announcements={p for p in players if channel=='effect' and settings['audio_mode']=='auto' and player_can_overlay(self.hass,p)}
-        if other and resources & other.resources:
-            if channel=='effect':
+        announcements={p for p in players if channel!='mood' and settings['audio_mode']=='auto' and player_can_overlay(self.hass,p)}
+        for other in self._runs.values():
+            if other.channel==channel or not resources & other.resources:continue
+            if channel!='mood' and other.channel=='mood':
                 shared=[p for p in players if player_resources(self.hass,p)&other.resources]
                 allowed=all(p in announcements for p in shared)
-            else:
+            elif channel=='mood' and other.channel!='mood':
                 shared=[p for p in other.players if player_resources(self.hass,p)&resources]
                 allowed=all(p in other.announcements for p in shared)
+            else:
+                raise ValueError('Deze speakers worden al door een ander effect gebruikt. Kies aparte speakers of wacht tot het effect klaar is.')
             if not allowed:
                 raise ValueError('Deze HA-speaker kan sfeer en effecten niet tegelijk mengen. Gebruik aparte speakers, dit apparaat, of geschikte Sonos-speakers met aankondigingen.')
         return announcements
 
+    def foreground_busy(self, channel, lights, resources):
+        if channel=='mood':return False
+        for other in self._runs.values():
+            if other.channel in {channel,'mood'}:continue
+            if (channel.startswith('spot:') or other.channel.startswith('spot:')) and self.settings['spot_concurrency']=='single':return True
+            if set(lights)&set(other.lights) or resources&other.resources:return True
+        return False
+
     async def async_play(self,effect_id,overrides=None,context=None,*,browser=False,browser_id=None,
-                         channel='effect',if_idle=False,automatic_rule=None,queue_token=None):
+                         channel='effect',if_idle=False,automatic_rule=None,queue_token=None,
+                         spot_motion=False,spot_show_token=None,spot_generation=None):
         self.ensure_enabled()
         browser_id=browser_id or self.browser_id
         settings=self.playback_settings(effect_id,channel,overrides or {})
         effect,settings,lights,players,resources,audio_base=self.prepare_playback(effect_id,settings,channel,browser_id,browser)
         output=settings['output']
+        if self.foreground_busy(channel,lights,resources):
+            if if_idle:return None
+            raise ValueError('Een andere schrikplek gebruikt deze lampen of speakers, of één plek tegelijk staat aan. Wacht of kies meerdere tegelijk met aparte apparaten.')
         self.check_audio_overlap(channel,players,resources,settings)
         if channel=='effect' and not queue_token:
             if if_idle and self.queues.run:return None
             if not if_idle:await self.queues.stop()
         async with self._lock:
             self.ensure_enabled()
+            if spot_generation is not None and spot_generation != (self.spots.generation, self.spots.stop_generations.get(channel.removeprefix('spot:'),0)):return None
+            if spot_motion and not self.spots.motion_armed(channel.removeprefix('spot:')):return None
+            if spot_show_token and self.spots.show_status.get('run_id')!=spot_show_token:return None
+            if channel.startswith('spot:') and not any(channel=='spot:'+s['id'] and s['enabled'] for s in self.settings['scare_spots']):return None
             if queue_token and (not self.queues.run or self.queues.run.status['run_id']!=queue_token):return None
             if automatic_rule:
                 rule = next((r for r in self.settings["motion_rules"] if r["id"] == automatic_rule and r["enabled"]), None)
                 if not self.settings["automatic_enabled"] or not rule:
                     return None
-            if if_idle and self.channels[channel]["playing"]:
+            if if_idle and self.channels.get(channel,{}).get("playing"):
                 return None
+            if self.foreground_busy(channel,lights,resources):
+                if if_idle:return None
+                raise ValueError('Een andere schrikplek gebruikt deze apparaten of één plek tegelijk staat aan.')
             announcements=self.check_audio_overlap(channel,players,resources,settings)
             await self._stop_locked(channel)
             self.ensure_enabled()
@@ -550,6 +595,9 @@ class BooCueController:
                       "browser_id": browser_id if output=="browser" else None,"queue_run_id":queue_token,
                       "duck_mood":settings["duck_mood"],"volume":settings["volume"],"announcements":sorted(announcements)}
             status.update(brightness=settings['brightness'], offset_ms=settings['offset_ms'], routing=settings['routing'])
+            if channel.startswith('spot:'):
+                spot=next(s for s in self.settings['scare_spots'] if channel=='spot:'+s['id'])
+                status.update(spot_id=spot['id'],spot_name=spot['name'],spot_show_run_id=spot_show_token)
             run = Playback(channel, effect, settings, context or Context(), lights, players, resources,
                            audio_base, delay, status)
             run.announcements=announcements
@@ -635,8 +683,7 @@ class BooCueController:
             if targets and run.settings["routing"] != "all":
                 targets = [targets[step % len(targets)]] if run.settings["routing"] == "alternate" else [randomizer.choice(targets)]
             run.desired.update({entity_id: cue for entity_id in targets})
-            foreground = self._runs.get("effect")
-            hidden = set(foreground.lights) if run.channel == "mood" and foreground else set()
+            hidden = {p for r in self._runs.values() if r.channel!='mood' for p in r.lights} if run.channel=='mood' else set()
             await self._command_lights(run, {p: cue for p in targets if p not in hidden})
         def progress(position, cycle):
             run.status.update(position=position, cycle=cycle)
@@ -688,10 +735,10 @@ class BooCueController:
                     self._warn(run, f"Speakervolume kon niet worden hersteld: {player}")
         await asyncio.gather(*(finish(p) for p in run.players))
         del self._runs[run.channel]
-        other = self._runs.get("mood" if run.channel == "effect" else "effect")
+        others = list(self._runs.values())
         restore = []
         for entity_id in run.lights:
-            if other and entity_id in other.lights:
+            if any(entity_id in other.lights for other in others):
                 continue
             snapshot = self._light_snapshots.pop(entity_id, None)
             if snapshot and run.settings["restore"]:
@@ -702,8 +749,10 @@ class BooCueController:
             except Exception:
                 LOGGER.exception("Could not restore BooCue lights")
                 run.status["error"] = "Niet alle lampstanden konden worden hersteld; controleer je lampen."
-        if run.channel == "effect" and other:
-            await self._command_lights(other, {p: cue for p, cue in other.desired.items() if p in run.lights})
+        mood=self._runs.get('mood')
+        if run.channel != 'mood' and mood:
+            hidden={p for other in others if other.channel!='mood' for p in other.lights}
+            await self._command_lights(mood, {p: cue for p, cue in mood.desired.items() if p in run.lights and p not in hidden})
         run.status["playing"] = False
         run.finished.set()
         self._notify()

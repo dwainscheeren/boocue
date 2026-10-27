@@ -1,4 +1,77 @@
-const ASSET_REVISION = new URL(import.meta.url).searchParams.get('build') || '1.0.0';
+const SPOT_TEXT={
+ nl:{effectOne:'effect',effectMany:'effecten',sensorOne:'sensor',sensorMany:'sensoren',title:'Schrikplekken',help:'Koppel de speaker en lampen bij elke pop of plek. BooCue kiest steeds een complete plek; de algemene sfeer blijft onafhankelijk spelen.',add:'Nieuwe schrikplek',empty:'Geef elke schrik een eigen plek',emptyHelp:'Bijvoorbeeld: Clown met zijn speaker, rode lamp en bewegingssensor. Daarna kun je plekken afspelen, laten rouleren of op beweging laten reageren.',name:'Naam',enabled:'Plek ingeschakeld',effects:'Effecten voor deze plek',speakers:'Speakers bij deze plek',lights:'Lampen bij deze plek',sensors:'Bewegingssensoren (optioneel)',noSensors:'Zonder sensor gebruik je Afspelen of de lus.',choice:'Effectvolgorde',spotOrder:'Volgorde van plekken',random:'Willekeurig',sequence:'Vaste volgorde',volume:'Volume',brightness:'Lichtsterkte',output:'Geluid',haSpeakers:'HA-speakers',silent:'Alleen lampen',cooldown:'Minimale tijd tussen bewegingen (seconden)',match:'Bij beweging',any:'Eén van de sensoren (OR)',all:'Alle sensoren actief (AND)',motionHelp:'Alleen een nieuwe beweging telt. Schakel bewegingsregels bovenaan in om sensoren te gebruiken.',armed:'Bewegingsregels inschakelen',save:'Plek opslaan',cancel:'Annuleren',edit:'Bewerken',remove:'Verwijderen',undo:'Ongedaan maken',play:'Afspelen',stop:'Stoppen',testRandom:'Willekeurige plek',stopSpots:'Stop schrikplekken',concurrency:'Gelijktijdig afspelen',single:'Eén schrikplek tegelijk',parallel:'Meerdere plekken tegelijk',concurrencyHelp:'Plekken met dezelfde lamp, speaker of speakergroep kunnen niet tegelijk spelen. Een trigger voor een bezette plek wordt overgeslagen.',loop:'Plekken laten rouleren',loopHelp:'De lus speelt gekozen plekken na elkaar. In de stand meerdere tegelijk kunnen sensoren andere plekken daarnaast activeren.',startLoop:'Start lus',stopLoop:'Stop lus',saveLoop:'Lus opslaan',gapMin:'Kortste pauze (seconden)',gapMax:'Langste pauze (seconden)',repeat:'Lus blijven herhalen',useAll:'Alle ingeschakelde plekken gebruiken',chooseSpots:'Plekken in de lus',ready:'Klaar',playing:'Speelt',waiting:'Wacht op volgende plek',busy:'Overgeslagen: de apparaten waren al bezig.',cooldownState:'Laatste beweging overgeslagen binnen de wachttijd',disabled:'Uitgeschakeld',noEffects:'Kies een naam, minstens één effect en lampen of speakers.',chooseOne:'Kies minstens één plek voor de lus.',saved:'Schrikplek opgeslagen',removed:'Schrikplek verwijderd',loopSaved:'Lus opgeslagen',none:'Geen gekozen',automation:'Home Assistant-automations',spotId:'Plek-id',manual:'Handmatig of in de lus',close:'Melding sluiten'},
+ en:{effectOne:'effect',effectMany:'effects',sensorOne:'sensor',sensorMany:'sensors',title:'Scare spots',help:'Pair the speaker and lights at each prop or location. BooCue selects a complete spot; the background mood keeps playing independently.',add:'New scare spot',empty:'Give each scare its own spot',emptyHelp:'For example: Clown with its speaker, red light and motion sensor. Then play spots, rotate through them or react to movement.',name:'Name',enabled:'Spot enabled',effects:'Effects for this spot',speakers:'Speakers at this spot',lights:'Lights at this spot',sensors:'Motion sensors (optional)',noSensors:'Without a sensor, use Play or the loop.',choice:'Effect order',spotOrder:'Spot order',random:'Random',sequence:'Fixed order',volume:'Volume',brightness:'Brightness',output:'Sound',haSpeakers:'HA speakers',silent:'Lights only',cooldown:'Minimum time between motion triggers (seconds)',match:'When motion occurs',any:'Any sensor (OR)',all:'All sensors active (AND)',motionHelp:'Only new motion counts. Arm motion rules above to use the sensors.',armed:'Arm motion rules',save:'Save spot',cancel:'Cancel',edit:'Edit',remove:'Remove',undo:'Undo',play:'Play',stop:'Stop',testRandom:'Random spot',stopSpots:'Stop scare spots',concurrency:'Concurrent playback',single:'One scare spot at a time',parallel:'Multiple spots at once',concurrencyHelp:'Spots sharing a light, speaker or speaker-group member cannot play together. Triggers for a busy spot are skipped.',loop:'Rotate through spots',loopHelp:'The loop plays selected spots one after another. In parallel mode, sensors can trigger other spots alongside it.',startLoop:'Start loop',stopLoop:'Stop loop',saveLoop:'Save loop',gapMin:'Shortest pause (seconds)',gapMax:'Longest pause (seconds)',repeat:'Keep repeating the loop',useAll:'Use all enabled spots',chooseSpots:'Spots in the loop',ready:'Ready',playing:'Playing',waiting:'Waiting for next spot',busy:'Skipped: the devices were already busy.',cooldownState:'Last motion skipped during cooldown',disabled:'Disabled',noEffects:'Choose a name, at least one effect and lights or speakers.',chooseOne:'Choose at least one spot for the loop.',saved:'Scare spot saved',removed:'Scare spot removed',loopSaved:'Loop saved',none:'None selected',automation:'Home Assistant automations',spotId:'Spot id',manual:'Manual or loop',close:'Dismiss message'}
+};
+
+class ScareSpotsView {
+ constructor(panel,helpers){this.p=panel;this.h=helpers;this.draft=null;this.showDraft=null;this.useAll=true;this.pending=new Set();this.generation=0;this.spotGenerations=new Map();}
+ get t(){return SPOT_TEXT[this.p._language]||SPOT_TEXT.en;}
+ get spots(){return this.p._settings.scare_spots||[];}
+ initShow(){if(!this.showDraft){this.showDraft=structuredClone(this.p._settings.spot_show||{spot_ids:[],mode:'random',repeat:true,gap_min:4,gap_max:15});this.useAll=!this.showDraft.spot_ids.length;}}
+ choices(items,list,selected){const {esc,icon}=this.h;return `<div class="rule-choices spot-choices">${items.map(item=>{const id=item.entity_id||item.id;return `<label class="check-row"><input type="checkbox" data-sp-list="${list}" value="${esc(id)}" ${selected.includes(id)?'checked':''}>${item.icon?icon(item.icon):''}<span>${esc(item.name||item.title)}${item.area?`<small>${esc(item.area)}</small>`:''}</span></label>`;}).join('')}</div>`;}
+ render({focus=null,scroll=null}={}){
+  const p=this.p;if(p._mode!=='spots')return;
+  const root=p.shadowRoot.querySelector('.library');if(!root)return;
+  const view=p._captureView(),{esc,icon}=this.h,t=this.t,d=this.draft;this.initShow();const q=this.showDraft;
+  root.innerHTML=`<div class="library-heading"><div><h2>${t.title}</h2><p>${t.help}</p></div><button class="secondary-button" data-sp-action="new">${icon('mdi:plus')}${t.add}</button></div>
+   <div class="spot-controls"><label>${t.concurrency}<select data-sp-global="spot_concurrency"><option value="single" ${p._settings.spot_concurrency!=='parallel'?'selected':''}>${t.single}</option><option value="parallel" ${p._settings.spot_concurrency==='parallel'?'selected':''}>${t.parallel}</option></select></label><label class="check-row"><input type="checkbox" data-action="arm" ${p._settings.automatic_enabled?'checked':''}>${t.armed}</label></div><p class="field-help">${t.concurrencyHelp}</p>
+   <div class="rule-actions spot-transport"><button class="secondary-button" data-sp-action="play" ${!this.spots.some(s=>s.enabled)||p._settings.enabled===false?'disabled':''}>${icon('mdi:shuffle')}${t.testRandom}</button><button class="secondary-button" data-sp-action="stop_all">${icon('mdi:stop')}${t.stopSpots}</button><span data-sp-show-status role="status"></span></div>
+   ${d?`<section class="rule-editor spot-editor" aria-label="${t.edit}"><label>${t.name}<input data-sp-field="name" maxlength="80" value="${esc(d.name)}"></label>
+    <div class="rule-fields"><label>${t.output}<select data-sp-runtime="output"><option value="speakers" ${d.settings.output==='speakers'?'selected':''}>${t.haSpeakers}</option><option value="none" ${d.settings.output==='none'?'selected':''}>${t.silent}</option></select></label><label>${t.choice}<select data-sp-field="mode"><option value="random" ${d.mode==='random'?'selected':''}>${t.random}</option><option value="sequence" ${d.mode==='sequence'?'selected':''}>${t.sequence}</option></select></label></div>
+    <div class="rule-fields"><fieldset class="rule-pool"><legend>${t.speakers}</legend>${d.settings.output==='speakers'?this.choices(p._entities.players,'speakers',d.settings.speakers):`<p class="field-help">${t.silent}</p>`}</fieldset><fieldset class="rule-pool"><legend>${t.lights}</legend>${this.choices(p._entities.lights,'lights',d.settings.lights)}</fieldset></div>
+    <div class="rule-fields"><label>${t.volume} (%)<input type="number" min="0" max="100" data-sp-runtime="volume" value="${Math.round(d.settings.volume*100)}"></label><label>${t.brightness} (%)<input type="number" min="1" max="100" data-sp-runtime="brightness" value="${Math.round(d.settings.brightness*100)}"></label></div>
+    <fieldset class="rule-pool"><legend>${t.effects}</legend>${this.choices(p._effects.filter(e=>e.category!=='moods'),'effects',d.effects)}</fieldset>
+    <details class="rule-lights" ${d.sensors.length?'open':''}><summary>${t.sensors} · ${d.sensors.length}</summary>${this.choices(p._entities.sensors,'sensors',d.sensors)}<p class="field-help">${t.noSensors}</p><div class="rule-fields"><label>${t.match}<select data-sp-field="match"><option value="any" ${d.match==='any'?'selected':''}>${t.any}</option><option value="all" ${d.match==='all'?'selected':''}>${t.all}</option></select></label><label>${t.cooldown}<input type="number" min="0" max="3600" data-sp-field="cooldown" value="${d.cooldown}"></label></div><p class="field-help">${t.motionHelp}</p></details>
+    <label class="check-row"><input type="checkbox" data-sp-field="enabled" ${d.enabled?'checked':''}>${t.enabled}</label><details><summary>${t.automation}</summary><p>${t.spotId}: <code>${esc(d.id)}</code></p></details><div class="rule-actions"><button class="stop-button" data-sp-action="save">${t.save}</button><button class="secondary-button" data-sp-action="cancel">${t.cancel}</button></div></section>`:''}
+   <div class="motion-rules spot-list">${this.spots.map(s=>`<article class="motion-rule scare-spot"><div><h3>${esc(s.name)}</h3><p>${s.settings.output==='none'?t.silent:s.settings.speakers.map(id=>esc(p._entities.players.find(e=>e.entity_id===id)?.name||id)).join(', ')} · ${s.settings.lights.map(id=>esc(p._entities.lights.find(e=>e.entity_id===id)?.name||id)).join(', ')||t.none}</p><p>${s.effects.length} ${s.effects.length===1?t.effectOne:t.effectMany} · ${s.sensors.length?`${s.sensors.length} ${s.sensors.length===1?t.sensorOne:t.sensorMany} · ${s.match==='all'?'AND':'OR'}`:t.manual}</p><p data-sp-status="${esc(s.id)}" role="status"></p><progress data-sp-progress="${esc(s.id)}" max="100" value="0" aria-label="${t.playing}: ${esc(s.name)}" hidden></progress></div><label class="check-row"><input type="checkbox" data-sp-enabled="${esc(s.id)}" ${s.enabled?'checked':''}>${t.enabled}</label><div class="rule-actions"><button class="stop-button" data-sp-action="play" data-sp-id="${esc(s.id)}" ${!s.enabled||p._settings.enabled===false?'disabled':''}>${icon('mdi:play')}${t.play}</button><button class="text-button" data-sp-action="stop" data-sp-id="${esc(s.id)}">${t.stop}</button><button class="text-button" data-sp-action="edit" data-sp-id="${esc(s.id)}">${t.edit}</button><button class="text-button" data-sp-action="remove" data-sp-id="${esc(s.id)}">${t.remove}</button></div></article>`).join('')||(!d?`<div class="empty"><h3>${t.empty}</h3><p>${t.emptyHelp}</p></div>`:'')}</div>
+   ${this.spots.length?`<details class="spot-show advanced" open><summary>${t.loop}</summary><p class="field-help">${t.loopHelp}</p><label class="check-row"><input type="checkbox" data-sp-all ${this.useAll?'checked':''}>${t.useAll}</label>${!this.useAll?`<fieldset class="rule-pool"><legend>${t.chooseSpots}</legend><div class="rule-choices">${this.spots.filter(s=>s.enabled).map(s=>`<label class="check-row"><input type="checkbox" data-sp-show-spot="${esc(s.id)}" ${q.spot_ids.includes(s.id)?'checked':''}>${esc(s.name)}</label>`).join('')}</div></fieldset>`:''}<div class="rule-fields"><label>${t.spotOrder}<select data-sp-show="mode"><option value="random" ${q.mode==='random'?'selected':''}>${t.random}</option><option value="sequence" ${q.mode==='sequence'?'selected':''}>${t.sequence}</option></select></label><label class="check-row"><input type="checkbox" data-sp-show="repeat" ${q.repeat?'checked':''}>${t.repeat}</label><label>${t.gapMin}<input type="number" min="0" max="3600" data-sp-show="gap_min" value="${q.gap_min}"></label><label>${t.gapMax}<input type="number" min="0" max="3600" data-sp-show="gap_max" value="${q.gap_max}"></label></div><div class="rule-actions"><button class="secondary-button" data-sp-action="save-show">${t.saveLoop}</button><button class="stop-button" data-sp-action="show_start">${icon('mdi:play')}${t.startLoop}</button><button class="secondary-button" data-sp-action="show_stop">${t.stopLoop}</button></div></details>`:''}`;
+  this.updateStatus();p._restoreView(view,{focus,scroll});
+ }
+ updateStatus(){
+  const p=this.p;if(p._mode!=='spots')return;const t=this.t,root=p.shadowRoot;
+  for(const el of root.querySelectorAll('[data-sp-status]')){const state=p._status.scare_spots?.[el.dataset.spStatus]||{},s=this.spots.find(s=>s.id===el.dataset.spStatus),e=state.event||{};el.textContent=!s?.enabled?t.disabled:state.playing?`${t.playing}: ${state.title}`:e.error||state.error||(e.state==='busy'?t.busy:e.state==='cooldown'?t.cooldownState:t.ready);}
+  for(const bar of root.querySelectorAll('[data-sp-progress]')){const state=p._status.scare_spots?.[bar.dataset.spProgress]||{};bar.hidden=!state.playing;bar.value=state.duration?Math.min(100,(state.position||0)/state.duration*100):0;}
+  const count=Object.values(p._status.scare_spots||{}).filter(s=>s.playing).length,badge=root.querySelector('[data-mode-state="spots"]');if(badge)badge.textContent=count?String(count):'';
+  const show=p._status.spot_show||{},label=root.querySelector('[data-sp-show-status]');if(label)label.textContent=show.error||(show.playing?`${show.waiting?t.waiting:t.playing}${show.spot_name?': '+show.spot_name:''}`:'');
+  for(const b of root.querySelectorAll('[data-sp-action]')){const a=b.dataset.spAction,id=b.dataset.spId;let disabled=this.pending.has(a+':'+(id||''));if(a==='show_start')disabled||=show.playing||p._settings.enabled===false||!this.spots.some(s=>s.enabled);if(a==='show_stop')disabled||=!show.playing;if(a==='stop')disabled||=!p._status.scare_spots?.[id]?.playing;if(a==='play')disabled||=p._settings.enabled===false||!this.spots.some(s=>s.enabled&&(!id||s.id===id));b.disabled=disabled;}
+ }
+ async saveShow(){this.initShow();this.showDraft.spot_ids=this.showDraft.spot_ids.filter(id=>this.spots.some(s=>s.id===id&&s.enabled));if(!this.useAll&&!this.showDraft.spot_ids.length){this.p._message(this.t.chooseOne,true);return false;}this.p._settings.spot_show={...structuredClone(this.showDraft),spot_ids:this.useAll?[]:[...this.showDraft.spot_ids]};return this.p._save();}
+ async click(button){
+  const p=this.p,t=this.t,a=button.dataset.spAction,id=button.dataset.spId;
+  if(a==='new'){const settings=p._resolved('','effect');this.draft={id:crypto.randomUUID(),name:'',enabled:true,effects:[],mode:'random',sensors:[],match:'any',cooldown:30,settings:{...settings,lights:[],speakers:[],output:'speakers',repeat:false,speed:1}};this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
+  if(a==='edit'){this.draft=structuredClone(this.spots.find(s=>s.id===id));this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
+  if(a==='cancel'){this.draft=null;this.render({focus:'[data-sp-action="new"]'});return;}
+  if(a==='save'){const d=this.draft;if(!d.name.trim()||!d.effects.length||(d.settings.output==='speakers'?!d.settings.speakers.length:!d.settings.lights.length)){p._message(t.noEffects,true);return;}p._settings.scare_spots=this.spots.filter(s=>s.id!==d.id);p._settings.scare_spots.push(structuredClone(d));if(await p._save()){this.draft=null;p._message(t.saved);this.render({focus:`[data-sp-action="edit"][data-sp-id="${CSS.escape(d.id)}"]`});}return;}
+  if(a==='remove'){this.deleted=structuredClone(this.spots.find(s=>s.id===id));const previous=structuredClone(p._settings.spot_show);p._settings.scare_spots=this.spots.filter(s=>s.id!==id);if(p._settings.spot_show)p._settings.spot_show.spot_ids=p._settings.spot_show.spot_ids.filter(s=>s!==id);if(await p._save()){this.showDraft=null;p._message(t.removed);const undo=document.createElement('button');undo.className='text-button';undo.dataset.spAction='undo';undo.textContent=t.undo;p.shadowRoot.getElementById('message').append(undo);this.draft=null;this.render();}else p._settings.spot_show=previous;return;}
+  if(a==='undo'&&this.deleted){p._settings.scare_spots=[...this.spots,this.deleted];if(await p._save()){this.deleted=null;p.shadowRoot.getElementById('message').hidden=true;this.render();}return;}
+  if(a==='save-show'){if(await this.saveShow())p._message(t.loopSaved);return;}
+    return this.command(a,id);
+ }
+ async command(action,id){
+  const p=this.p,key=action+':'+(id||'');if(this.pending.has(key))return;
+  if(['stop_all','show_stop'].includes(action))this.generation++;
+  if(action==='stop'&&id)this.spotGenerations.set(id,(this.spotGenerations.get(id)||0)+1);
+  const generation=this.generation,spotGeneration=this.spotGenerations.get(id)||0;this.pending.add(key);this.updateStatus();
+  try{if(action==='show_start'&&(!await this.saveShow()||generation!==this.generation||p._settings.enabled===false))return;const result=await p._hass.callWS({type:'boocue/spot',action,...(id?{spot_id:id}:{})});
+   if((generation!==this.generation||spotGeneration!==(this.spotGenerations.get(id)||0))&&result?.run_id&&['play','show_start'].includes(action)){await p._hass.callWS({type:'boocue/spot',action:action==='play'?'stop':'show_stop',...(action==='play'?{spot_id:result.spot_id||id}:{}),run_id:result.run_id});return;}
+   if(action==='play'&&!result)p._message(this.t.busy);
+   if(action==='show_start'&&result)p._status.spot_show=result;
+  }catch(err){p._message(String(err.message||err),true);}finally{this.pending.delete(key);this.updateStatus();}
+ }
+ input(target){if(target.dataset.spField&&this.draft)this.draft[target.dataset.spField]=target.type==='checkbox'?target.checked:target.dataset.spField==='cooldown'?Number(target.value):target.value;else if(target.dataset.spRuntime&&this.draft)this.draft.settings[target.dataset.spRuntime]=target.dataset.spRuntime==='output'?target.value:Number(target.value)/100;else if(target.dataset.spShow){this.initShow();this.showDraft[target.dataset.spShow]=target.type==='checkbox'?target.checked:['gap_min','gap_max'].includes(target.dataset.spShow)?Number(target.value):target.value;}}
+ async change(target){
+  const p=this.p;this.input(target);
+  if(target.dataset.spGlobal){p._settings[target.dataset.spGlobal]=target.value;await p._save();}
+  else if(target.dataset.spEnabled){const spot=this.spots.find(s=>s.id===target.dataset.spEnabled);if(spot){spot.enabled=target.checked;await p._save();this.render({focus:`[data-sp-enabled="${CSS.escape(spot.id)}"]`});}}
+  else if(target.dataset.spList&&this.draft){const key=target.dataset.spList,obj=['lights','speakers'].includes(key)?this.draft.settings:this.draft;obj[key]=target.checked?[...new Set([...obj[key],target.value])]:obj[key].filter(id=>id!==target.value);}
+  else if(target.hasAttribute('data-sp-all')){this.useAll=target.checked;this.initShow();if(!this.useAll&&!this.showDraft.spot_ids.length)this.showDraft.spot_ids=this.spots.filter(s=>s.enabled).map(s=>s.id);this.render({focus:'[data-sp-all]'});}
+  else if(target.dataset.spShowSpot){this.initShow();const id=target.dataset.spShowSpot;this.showDraft.spot_ids=target.checked?[...new Set([...this.showDraft.spot_ids,id])]:this.showDraft.spot_ids.filter(s=>s!==id);}
+  if(target.dataset.spRuntime==='output')this.render({focus:'[data-sp-runtime="output"]'});
+  this.updateStatus();
+ }
+}
+
+const ASSET_REVISION = new URL(import.meta.url).searchParams.get('build') || '1.1.0';
 const TEXT = {
   nl: {
     subtitle: 'Een beetje geluid. Een huis vol kippenvel.', stage: 'Jouw podium', lights: 'Lampen',
@@ -23,7 +96,7 @@ const TEXT = {
     disconnected: 'Home Assistant is niet verbonden. Wacht op verbinding en probeer opnieuw.',
     retry: 'Opnieuw proberen', unavailable: 'Niet beschikbaar', imported: 'effecten geïmporteerd',
     noFavorites: 'Nog geen favorieten. Gebruik het hartje bij een effect.',
-    version: 'Eigen demo’s en jouw lokale effectpakketten', commands: 'lichtcommando’s overgeslagen',
+    version: 'Ingebouwde geluiden en jouw geïmporteerde pakketten', commands: 'lichtcommando’s overgeslagen',
     menu: 'Open Home Assistant-menu', refresh: 'Lampen verversen',
   },
   en: {
@@ -49,7 +122,7 @@ const TEXT = {
     disconnected: 'Home Assistant is disconnected. Wait for a connection and try again.',
     retry: 'Try again', unavailable: 'Unavailable', imported: 'effects imported',
     noFavorites: 'No favorites yet. Tap the heart beside an effect.',
-    version: 'Original demos and your local effect packs', commands: 'light commands skipped',
+    version: 'Built-in sounds and your imported packs', commands: 'light commands skipped',
     menu: 'Open Home Assistant menu', refresh: 'Refresh lights',
   },
 };
@@ -172,6 +245,7 @@ class BooCuePanel extends HTMLElement {
     this._effects = [];
     this._entities = { lights: [], players: [], sensors: [] };
     this._mode = 'effect'; this._modeViews = {}; this._sources = new Map(); this._pending = new Set(); this._generations = {}; this._ruleDraft = null; this._queueDraft = null; this._browserId = null; this._receiving = new Map();
+    this._spotsView = new ScareSpotsView(this,{esc,icon});
     this._settings = {};
     this._status = { playing: false };
     this._category = 'everything';
@@ -185,6 +259,8 @@ class BooCuePanel extends HTMLElement {
     this._boundClick = e => this._onClick(e);
     this._boundInput = e => this._onInput(e);
     this._boundChange = e => this._onChange(e);
+    // HA can assign hass before an asynchronously loaded element is upgraded.
+    if(Object.hasOwn(this,'hass')){const hass=this.hass;delete this.hass;this.hass=hass;}
   }
 
   set hass(value) {
@@ -206,6 +282,7 @@ class BooCuePanel extends HTMLElement {
     if (this._hass && !this._loading) this._load();
   }
   disconnectedCallback() {
+    this._spotsView.generation++;
     this._queueGeneration=(this._queueGeneration||0)+1;
     for (const c of ['effect','mood','preview']) this._generations[c] = (this._generations[c] || 0) + 1;
     this.shadowRoot.removeEventListener('click', this._boundClick);
@@ -263,7 +340,7 @@ class BooCuePanel extends HTMLElement {
   }
 
   _renderLoading(error) {
-    this.shadowRoot.innerHTML = `<link rel="stylesheet" href="/boocue_frontend/panel.css?v=1.0.0&build=${encodeURIComponent(ASSET_REVISION)}">
+    this.shadowRoot.innerHTML = `<link rel="stylesheet" href="/boocue_frontend/panel.css?v=1.1.0&build=${encodeURIComponent(ASSET_REVISION)}">
       <section class="app loading"><h1>BooCue</h1>${error ? `<p role="alert">${esc(error)}</p><button data-action="retry">${this.t.retry}</button>` : '<div class="skeleton"></div><div class="skeleton short"></div>'}</section>`;
   }
 
@@ -272,18 +349,18 @@ class BooCuePanel extends HTMLElement {
     const t = this.t, s = this._runtime();
     const ready=s.lights.length || s.output==='browser' || (s.output==='speakers' && s.speakers.length);
     const theme = this._themePreference || (this._hass?.themes?.darkMode ? 'dark' : 'light');
-    this.shadowRoot.innerHTML = `<link rel="stylesheet" href="/boocue_frontend/panel.css?v=1.0.0&build=${encodeURIComponent(ASSET_REVISION)}">
+    this.shadowRoot.innerHTML = `<link rel="stylesheet" href="/boocue_frontend/panel.css?v=1.1.0&build=${encodeURIComponent(ASSET_REVISION)}">
     <div class="app" data-theme="${theme}">
       <header class="app-header">
         <button class="icon-button menu" data-action="menu" aria-label="${t.menu}">${icon('mdi:menu')}</button>
         <div class="brand">${icon('mdi:ghost')}<div><h1>BooCue</h1><p>${t.subtitle}</p></div></div>
         <button class="icon-button theme" data-action="theme" aria-label="${theme === 'dark' ? t.light : t.dark}" title="${theme === 'dark' ? t.light : t.dark}">${icon(theme === 'dark' ? 'mdi:white-balance-sunny' : 'mdi:weather-night')}</button>
       </header>
-      <nav class="mode-tabs" aria-label="BooCue">${[['effect',t.effectMode,'mdi:lightning-bolt-outline'],['queue',t.queueMode,'mdi:playlist-play'],['mood',t.moodTab,'mdi:weather-night'],['automatic',t.autoMode,'mdi:motion-sensor']].map(([key,label,i]) => `<button data-mode="${key}" aria-pressed="${this._mode===key}">${icon(i)}${label}<span data-mode-state="${key}"></span></button>`).join('')}</nav>
+      <nav class="mode-tabs" aria-label="BooCue">${[['effect',t.effectMode,'mdi:lightning-bolt-outline'],['queue',t.queueMode,'mdi:playlist-play'],['mood',t.moodTab,'mdi:weather-night'],['automatic',t.autoMode,'mdi:motion-sensor'],['spots',this._spotsView.t.title,'mdi:speaker-multiple']].map(([key,label,i]) => `<button data-mode="${key}" aria-pressed="${this._mode===key}">${icon(i)}${label}<span data-mode-state="${key}"></span></button>`).join('')}</nav>
       <div id="message" class="message" role="status" hidden></div>
       <div class="browser-station"><button class="secondary-button master-power" data-action="power" aria-pressed="${this._settings.enabled!==false}" title="${t.powerHelp}">${icon('mdi:power')}<span>${this._settings.enabled===false?t.powerOff:t.powerOn}</span></button><button class="text-button" data-action="browser-ready">${icon('mdi:volume-high')}<span id="browser-ready-label">${this._browserId?t.browserReady:t.enableBrowser}</span></button><span class="field-help">${t.browserHelp}</span></div>
       <p class="master-disabled" id="master-disabled" role="status" ${this._settings.enabled===false?'':'hidden'}>${t.disabledHelp}</p>
-      <div class="workspace ${['automatic','queue'].includes(this._mode)?'automatic-workspace':''}">
+      <div class="workspace ${['automatic','queue','spots'].includes(this._mode)?'automatic-workspace':''}">
         <aside class="setup ${ready ? '' : 'expanded'}" aria-labelledby="stage-title">
           <div class="section-heading"><h2 id="stage-title">${t.stage}</h2><span id="selection-count"></span><button class="setup-toggle text-button" data-action="setup" aria-expanded="${!ready}"></button></div>
           <div class="lamp-heading"><label for="light-search">${t.lights}</label><button class="icon-button small" data-action="refresh" aria-label="${t.refresh}">${icon('mdi:refresh')}</button></div>
@@ -327,7 +404,7 @@ class BooCuePanel extends HTMLElement {
       </section>
     </div>`;
     for (const key of ['output','routing','speed','audio_mode']) this.shadowRoot.getElementById(key).value = String(s[key]);
-    this._renderLights(); this._renderEffects(); if (this._mode === 'automatic') this._renderAutomatic(); if(this._mode==='queue')this._renderQueues(); this._renderStatus();
+    this._renderLights(); this._renderEffects(); if (this._mode === 'automatic') this._renderAutomatic(); if(this._mode==='queue')this._renderQueues(); if(this._mode==='spots')this._spotsView.render(); this._renderStatus();
     this._restoreView(view,{focus});
   }
 
@@ -404,6 +481,9 @@ class BooCuePanel extends HTMLElement {
     for(const attr of ['data-mode','data-action','data-route-mode','data-route-volume','data-rule-field','data-rule-percent','data-rule-effect','data-rule-light','data-rule-enabled','data-edit-rule','data-remove-rule','data-play','data-preview','data-favorite','data-stop','data-start-queue','data-edit-queue','data-remove-queue','data-queue-field','data-queue-runtime','data-queue-percent','data-rule-sensor','data-queue-add','data-queue-up','data-queue-down','data-queue-remove','data-queue-inherit','data-queue-light','data-queue-item']) {
       if(el.hasAttribute(attr))return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
     }
+    if(el.hasAttribute('data-sp-list'))return `[data-sp-list="${CSS.escape(el.dataset.spList)}"][value="${CSS.escape(el.value)}"]`;
+    if(el.hasAttribute('data-sp-action'))return `[data-sp-action="${CSS.escape(el.dataset.spAction)}"]${el.dataset.spId?`[data-sp-id="${CSS.escape(el.dataset.spId)}"]`:''}`;
+    for(const attr of ['data-sp-field','data-sp-runtime','data-sp-global','data-sp-show','data-sp-enabled','data-sp-show-spot','data-sp-all'])if(el.hasAttribute(attr))return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
     if(el.tagName==='SUMMARY') {const key=this._disclosureKey(el.parentElement);return key?`${key}>summary`:null;}
     return null;
   }
@@ -416,6 +496,7 @@ class BooCuePanel extends HTMLElement {
     if(el.classList.contains('queue-options'))return '.queue-options';
     if(el.classList.contains('queue-lights'))return '.queue-lights';
     if(el.classList.contains('rule-lights'))return '.rule-lights';
+    if(el.classList.contains('spot-show'))return '.spot-show';
     if(el.classList.contains('advanced'))return '.advanced';
     return null;
   }
@@ -468,6 +549,7 @@ class BooCuePanel extends HTMLElement {
   }
 
   _renderStatus() {
+    this._spotsView.updateStatus();
     const root=this.shadowRoot;
     if(!root.getElementById('effect-title'))return;
     const disabled=this._settings.enabled===false;
@@ -588,6 +670,7 @@ class BooCuePanel extends HTMLElement {
       this._settings[key]=state[key];if(this._savedSettings)this._savedSettings[key]=state[key];
     }
     if(globalStop||state.enabled===false&&(wasEnabled||this._pending.size||this._sources.size||this._testTone)){
+      this._spotsView.generation++;
       this._queueGeneration=(this._queueGeneration||0)+1;
       for(const key of ['effect','mood','preview','test'])this._generations[key]=(this._generations[key]||0)+1;
       this._pending.clear();this._stopAudio();
@@ -684,6 +767,7 @@ class BooCuePanel extends HTMLElement {
   async _onClick(event) {
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
+    if(button.dataset.spAction){await this._spotsView.click(button);return;}
     if(button.dataset.startQueue)return this._startQueue(button.dataset.startQueue);
     if(button.dataset.editQueue){this._queueDraft=structuredClone(this._settings.queues.find(q=>q.id===button.dataset.editQueue));this._renderQueues({focus:'[data-queue-field="name"]',scroll:'start'});return;}
     if(button.dataset.removeQueue){const id=button.dataset.removeQueue,previous=structuredClone(this._settings.queues);this._deletedQueue=this._settings.queues.find(q=>q.id===id);this._settings.queues=this._settings.queues.filter(q=>q.id!==id);if(await this._save()){this._queueDraft=null;this._renderQueues();this._message(this.t.removed);const undo=document.createElement('button');undo.className='text-button';undo.dataset.action='undo-queue';undo.textContent=this.t.undo;this.shadowRoot.getElementById('message').append(undo);this._restoreView(null,{focus:'[data-action="undo-queue"]'});}else{this._settings.queues=previous;this._deletedQueue=null;}return;}
@@ -730,6 +814,7 @@ class BooCuePanel extends HTMLElement {
       }
       case 'clear': this._runtime().lights = []; this._renderLights(); this._save(); break;
       case 'stop':
+        this._spotsView.generation++;
         this._queueGeneration=(this._queueGeneration||0)+1;
         for(const c of ['effect','mood','preview']){this._generations[c]=(this._generations[c]||0)+1;this._pending.delete(c);}
         this._stopAudio();
@@ -861,6 +946,7 @@ class BooCuePanel extends HTMLElement {
 
   _onInput(event) {
     const target = event.target;
+    if(Object.keys(target.dataset).some(k=>k.startsWith('sp'))&&!target.dataset.speakerScope){this._spotsView.input(target);return;}
     if(target.dataset.queueField&&target.type!=='checkbox'&&target.tagName!=='SELECT'){const k=target.dataset.queueField;this._queueDraft[k]=['gap_min','gap_max'].includes(k)?Number(target.value):target.value;}
     if(target.dataset.queuePercent)this._queueDraft.settings[target.dataset.queuePercent]=Number(target.value)/100;
     if(target.dataset.rulePercent)this._ruleDraft[target.dataset.rulePercent]=Number(target.value)/100;
@@ -877,6 +963,7 @@ class BooCuePanel extends HTMLElement {
 
   async _onChange(event) {
     const target = event.target;
+    if(Object.keys(target.dataset).some(k=>k.startsWith('sp'))&&!target.dataset.speakerScope){await this._spotsView.change(target);return;}
     if(target.dataset.duck){this._runtime().duck_mood=Number(target.value)/100;this._save();this._updateDuck();
     }else if(target.dataset.queueField){const k=target.dataset.queueField;this._queueDraft[k]=target.type==='checkbox'?target.checked:['gap_min','gap_max'].includes(k)?Number(target.value):target.value;if(k==='advance')this._renderQueues();
     }else if(target.dataset.queueInherit){this._queueDraft.settings=target.checked?{}:Object.fromEntries(RUNTIME_KEYS.map(k=>[k,structuredClone(this._settings[k])]));this._renderQueues();

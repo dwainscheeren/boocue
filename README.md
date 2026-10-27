@@ -17,6 +17,7 @@ BooCue turns your Home Assistant lights and speakers into a Halloween soundboard
 | Set the scene | **Mood** loops a background atmosphere with its own lights, speaker targets and volume. |
 | Add a scare | **Effects** plays a short sound and its matching light sequence over the background scene. |
 | Let it run | **Queues** plays your chosen effects in a fixed order or shuffle, with repeat and a random pause between items. |
+| Build a haunted house | **Scare spots** pairs each prop’s speakers, lamps and effect pool, with random rotation, motion sensors and optional parallel playback. |
 | React to visitors | **On motion** uses one or more sensors to play an effect, start a queue or advance to the next item. |
 | Control it from a dashboard | The included **Lovelace card** offers master power, mood, effects, favorites and queue controls. |
 | Use existing automations | Native HA entities and actions let you add schedules, doorbells, presence or other conditions. |
@@ -94,6 +95,14 @@ The integration registers the card automatically; there is no second frontend re
 
 Follow the [step-by-step examples](docs/EXAMPLES.md) for these setups and ready-to-adapt automation YAML.
 
+## Speakers and lights at every prop
+
+![Scare spots with independent light targets and parallel playback](docs/images/scare-spots.jpg)
+
+*Example using virtual lights; each spot can also be paired with its own HA speakers.*
+
+Keep your atmosphere on the general speakers, then create **Scare spots** such as Clown, Witch and Ghost. Each spot owns its speakers, lights, effects and optional motion sensors. Trigger a spot manually, choose a random available spot or run a repeating location loop. Choose one scare at a time or several independent spots together. [Set up scare spots](docs/SCARE_SPOTS.md).
+
 ## Lights, speakers and control
 
 Mood and foreground effects have independent settings. An effect can also remember its own speaker targets and volume. Shared lights follow the foreground effect temporarily and then return to the mood. When restoration is enabled, stopping restores the previous light state.
@@ -124,6 +133,7 @@ You can also import your own ZIP containing `pack.json` and audio. WAV, MP3, OGG
 | Guide | Contents |
 | --- | --- |
 | [Example setups](docs/EXAMPLES.md) | Background mood, automatic scares, motion queues and HA YAML. |
+| [Scare spots](docs/SCARE_SPOTS.md) | Pair speakers and lights at each prop, motion triggers, location loops and parallel playback. |
 | [Dashboard card](docs/DASHBOARD.md) | Visual editor, card options and output overrides. |
 | [Automations](docs/AUTOMATIONS.md) | Native entities, action reference, sensor rules and playback behavior. |
 | [Effect format](docs/EFFECT_FORMAT.md) | Audio files, timed light cues and pack limits. |

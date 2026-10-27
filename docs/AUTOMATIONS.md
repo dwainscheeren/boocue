@@ -1,5 +1,7 @@
 # Motion rules and Home Assistant automations
 
+For props with their own paired lights and speakers, use [scare spots](SCARE_SPOTS.md). They support independent motion sensors, location loops, one-at-a-time or parallel playback and dedicated HA actions.
+
 BooCue offers both. Use **Queues** for a saved sequence and **On motion** for one or more sensors, an effect/queue action, destinations and a cooldown. Use Home Assistant automations when you want schedules, sun conditions, presence, helpers, doorbells, or coordination with other integrations. Both call the same playback engine.
 
 ## Master power versus stopping a show

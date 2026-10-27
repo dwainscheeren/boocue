@@ -82,8 +82,9 @@ def ws_dashboard(hass, connection, msg):
         c = get_controller(hass)
         connection.send_result(msg['id'], {
             'effects': [e.public(compact=True) for e in c.effects.values()],
-            'settings': {k: v for k, v in c.settings.items() if k != 'motion_rules'},
-            'motion_rule_count': len(c.settings['motion_rules']),
+            'settings': {k: v for k, v in c.settings.items() if k not in {'motion_rules','scare_spots'}},
+            'motion_rule_count': len(c.settings['motion_rules']) + sum(bool(s['sensors']) for s in c.settings['scare_spots']),
+            'scare_spots': [{'id':s['id'],'name':s['name'],'enabled':s['enabled']} for s in c.settings['scare_spots']],
             'status': c.status, 'server_time': time.time(),
         })
     except ValueError as err:
@@ -244,6 +245,37 @@ class ImportView(HomeAssistantView):
                 await hass.async_add_executor_job(archive.unlink, True)
 
 
+@websocket_api.websocket_command({
+    vol.Required('type'): 'boocue/spot',
+    vol.Required('action'): vol.In(['play','stop','show_start','show_stop','stop_all']),
+    vol.Optional('spot_id'): str,
+    vol.Optional('run_id'): str,
+})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_spot(hass, connection, msg):
+    try:
+        c = get_controller(hass)
+        action, spot_id = msg['action'], msg.get('spot_id')
+        if action == 'play':
+            result = await c.spots.trigger(spot_id, connection.context(msg))
+        elif action == 'stop':
+            if not spot_id:raise ValueError('Kies een schrikplek om te stoppen')
+            await c.spots.stop_spot(spot_id, msg.get('run_id'))
+            result = c.spots.status()
+        elif action == 'show_start':
+            result = await c.spots.start_show(connection.context(msg))
+        elif action == 'show_stop':
+            await c.spots.stop_show(expected_run_id=msg.get('run_id'))
+            result = c.spots.show_status
+        else:
+            await c.spots.stop_all()
+            result = c.spots.status()
+        connection.send_result(msg['id'], result)
+    except (ValueError, TypeError) as err:
+        connection.send_error(msg['id'], 'spot_failed', str(err))
+
+
 def _append(path: Path, chunk: bytes):
     with path.open("ab") as handle:
         handle.write(chunk)
@@ -251,7 +283,7 @@ def _append(path: Path, chunk: bytes):
 
 @callback
 def async_register_api(hass):
-    for command in [ws_get, ws_dashboard, ws_settings, ws_play, ws_stop, ws_audio, ws_browser_ready, ws_browser_release, ws_queue]:
+    for command in [ws_get, ws_dashboard, ws_settings, ws_play, ws_stop, ws_audio, ws_browser_ready, ws_browser_release, ws_queue, ws_spot]:
         websocket_api.async_register_command(hass, command)
     hass.http.register_view(AudioView)
     hass.http.register_view(ImportView)
