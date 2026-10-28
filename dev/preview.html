@@ -7,7 +7,7 @@
 <div class="preview-note">UI-ontwikkelvoorbeeld · gesimuleerde lampen · geen verbinding met je apparaten</div>
 <boocue-panel></boocue-panel>
 <script type="module">
-import '/boocue_frontend/boocue-panel.js?build=preview-1.1.4';
+import '/boocue_frontend/boocue-panel.js?build=preview-1.2.0';
 const paths = await (await fetch('/dev/mdi-paths.json')).json();
 customElements.define('ha-icon', class extends HTMLElement {
   connectedCallback() {
@@ -25,7 +25,7 @@ const lights=[
  {entity_id:'light.demo_switch',name:'Tafellamp',state:'off',area:'Woonkamer',color_modes:['onoff']},
 ];
 const runtime={lights:lights.slice(0,2).map(l=>l.entity_id),output:'browser',speakers:[],volume:.6,brightness:.8,speed:1,offset_ms:0,routing:'all',repeat:false,restore:true,interval_ms:250,audio_mode:"auto",duck_mood:.35};
-let settings={...runtime,enabled:true,favorites:[],mood:{...runtime,lights:[],repeat:true,volume:.3,effect_id:null},effect_routes:{},queues:[],motion_rules:[],automatic_enabled:false};
+let settings={...runtime,enabled:true,scare_spots:[],spot_concurrency:'single',spot_show:{spot_ids:[],mode:'random',repeat:true,gap_min:4,gap_max:15},favorites:[],mood:{...runtime,lights:[],repeat:true,volume:.3,effect_id:null},effect_routes:{},queues:[],motion_rules:[],automatic_enabled:false};
 const channels={effect:{playing:false},mood:{playing:false}},timers={},listeners=new Set();
 let station=null,queue={playing:false},queueTimer,stopSequence=0,runSequence=0;
 const status=()=>({enabled:settings.enabled,stop_sequence:stopSequence,playing:queue.playing||Object.values(channels).some(c=>c.playing),channels:structuredClone(channels),queue:structuredClone(queue),browser_ready:!!station,browser_station_id:station,automatic_enabled:settings.automatic_enabled,motion:{}});
@@ -59,11 +59,12 @@ function updatePreview(){
 const notify=()=>{updatePreview();return listeners.forEach(fn=>fn({data:{...status(),server_time:Date.now()/1000}}));};
 const players=[{entity_id:'media_player.demo_hall',name:'Speaker in de hal',state:'idle',area:'Hal',supported_features:4612},{entity_id:'media_player.demo_garden',name:'Speaker buiten',state:'idle',area:'Tuin',supported_features:4612}];
 const sensors=[{entity_id:'binary_sensor.demo_motion',name:'Beweging voordeur',state:'off',area:'Voordeur',device_class:'motion'},{entity_id:'binary_sensor.demo_garden',name:'Beweging tuinpad',state:'off',area:'Tuin',device_class:'motion'}];
+const props=[{entity_id:'switch.demo_clown',name:'Activeer Clown',domain:'switch',state:'off',area:'Voortuin',icon:'mdi:power'},{entity_id:'button.demo_clown',name:'Druk op clown',domain:'button',state:'unknown',area:'Voortuin',icon:'mdi:gesture-tap-button'},{entity_id:'switch.demo_pump',name:'Pomp bij skelet',domain:'switch',state:'off',area:'Voortuin',icon:'mdi:power'}];
 const hass={locale:{language:'nl'},themes:{darkMode:true},
  connection:{subscribeEvents:async fn=>{listeners.add(fn);return()=>listeners.delete(fn)}},
  fetchWithAuth:async(url,options)=>fetch(url,options),
  callWS:async msg=>{
-  if(msg.type==='boocue/get')return structuredClone({effects,settings,status:status(),entities:{lights,players,sensors},library_errors:[],server_time:Date.now()/1000});
+  if(msg.type==='boocue/get')return structuredClone({effects,settings,status:status(),entities:{lights,players,sensors,props},library_errors:[],server_time:Date.now()/1000});
   if(msg.type==='boocue/settings'){settings={...settings,...structuredClone(msg.settings)};if(!settings.enabled){stopQueue();for(const c of Object.keys(channels)){clearInterval(timers[c]);channels[c].playing=false;}}notify();return structuredClone(settings)}
   if(msg.type==='boocue/browser_ready'){station='preview-station';notify();return {station_id:station}}
   if(msg.type==='boocue/browser_release'){station=null;stopQueue();for(const c of Object.keys(channels)){clearInterval(timers[c]);channels[c].playing=false;}notify();return;}

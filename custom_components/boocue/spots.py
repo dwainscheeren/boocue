@@ -9,13 +9,14 @@ import uuid
 from .const import RUNTIME_KEYS
 from .models import SAFE_ID, number
 from .sequence import QueueCursor
+from .props import validate_props
 
 
 def validate_spots(raw, effect_ids, runtime_validator, entity_validator, runtime_base):
     if not isinstance(raw, list) or len(raw) > 32:
         raise ValueError("Kies maximaal 32 schrikplekken")
     result, seen = [], set()
-    allowed = {"id", "name", "enabled", "effects", "mode", "settings", "sensors", "match", "cooldown"}
+    allowed = {"id", "name", "enabled", "effects", "mode", "settings", "sensors", "match", "cooldown", "props"}
     for item in raw:
         if not isinstance(item, dict) or set(item) - allowed:
             raise ValueError("Ongeldige schrikplek")
@@ -35,12 +36,13 @@ def validate_spots(raw, effect_ids, runtime_validator, entity_validator, runtime
         if not isinstance(overrides, dict) or set(overrides) - RUNTIME_KEYS:
             raise ValueError("Ongeldige instellingen voor de schrikplek")
         settings = runtime_validator({**runtime_base, **overrides})
+        props = validate_props(item.get('props', []))
         if settings["output"] == "browser":
-            raise ValueError("Kies HA-speakers of alleen lampen voor een schrikplek")
+            raise ValueError("Kies HA-speakers of geen geluid voor een schrikplek")
         if settings["output"] == "speakers" and not settings["speakers"]:
             raise ValueError("Kies minstens één speaker voor de schrikplek")
-        if settings["output"] == "none" and not settings["lights"]:
-            raise ValueError("Kies lampen of speakers voor de schrikplek")
+        if settings["output"] == "none" and not settings["lights"] and not props:
+            raise ValueError("Kies lampen, speakers of schrikapparaten voor de schrikplek")
         settings.update(speed=1., repeat=False)
         sensors = entity_validator(item.get("sensors", []), "binary_sensor", 16)
         match = item.get("match", "any")
@@ -48,7 +50,7 @@ def validate_spots(raw, effect_ids, runtime_validator, entity_validator, runtime
             raise ValueError("Kies OR of AND voor de bewegingssensoren")
         result.append({"id": spot_id, "name": name.strip(), "enabled": enabled,
                        "effects": list(dict.fromkeys(effects)), "mode": mode,
-                       "settings": settings, "sensors": sensors, "match": match,
+                       "settings": settings, "sensors": sensors, "match": match, "props": props,
                        "cooldown": number(item.get("cooldown", 30), 0, 3600, "cooldown")})
         seen.add(spot_id)
     return result
@@ -262,6 +264,8 @@ class SpotManager:
         for channel in list(self.c.channels):
             if channel.startswith("spot:"):
                 await self.c.async_stop(channel=channel)
+        async with self.c._lock:
+            await self.c.props.retry_pending()
 
     async def settings_changed(self):
         if self._definitions != self.c.settings["scare_spots"]:

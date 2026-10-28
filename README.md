@@ -103,6 +103,8 @@ Follow the [step-by-step examples](docs/EXAMPLES.md) for these setups and ready-
 
 Keep your atmosphere on the general speakers, then create **Scare spots** such as Clown, Witch and Ghost. Each spot owns its speakers, lights, effects and optional motion sensors. Trigger a spot manually, choose a random available spot or run a repeating location loop. Choose one scare at a time or several independent spots together. [Set up scare spots](docs/SCARE_SPOTS.md).
 
+A spot can also pulse a relay or smart plug and press a Home Assistant button at a chosen point in the sound. For example, enable a clown at 0 seconds, press its trigger at 1 second and turn its switch off after 6 seconds. The editor includes device search, area filters and timing for each selected switch/button. [Configure switches and buttons](docs/SCARE_SPOTS.md#switches-relays-and-buttons).
+
 ## Lights, speakers and control
 
 Mood and foreground effects have independent settings. An effect can also remember its own speaker targets and volume. Shared lights follow the foreground effect temporarily and then return to the mood. When restoration is enabled, stopping restores the previous light state.

@@ -7,7 +7,7 @@ const registry=new Map();
 const defaults={lights:[],output:'browser',speakers:[],volume:.6,brightness:.8,speed:1,offset_ms:0,routing:'all',repeat:false,restore:true,interval_ms:250,audio_mode:'auto',duck_mood:.35};
 const context=vm.createContext({HTMLElement:class{attachShadow(){this.shadowRoot={};}},localStorage:{getItem:()=>null},
   URL,customElements:{get:n=>registry.get(n),define:(n,c)=>registry.set(n,c)},Map,Set,structuredClone,Date,Math,performance,Promise,
-  crypto:{getRandomValues:values=>webcrypto.getRandomValues(values)}});
+  crypto:{getRandomValues:values=>webcrypto.getRandomValues(values)},CSS:{escape:value=>value}});
 vm.runInContext(fs.readFileSync(new URL('../custom_components/boocue/frontend/boocue-panel.js',import.meta.url),'utf8').replace(/^import .*?;\n/,'').replaceAll('import.meta.url',JSON.stringify('http://ha.test/boocue-panel.js?build=test')),context);
 function fixture(){
  const p=new (registry.get('boocue-panel'))();
@@ -288,4 +288,39 @@ test('picker markup escapes device names, area labels and search text while reta
  assert.equal(html.includes('<Lamp>'),false);assert.equal(html.includes('&lt;Lamp&gt;'),true);
  assert.equal(html.includes('&quot;&lt;search&gt;'),true);assert.equal(html.includes('&quot;Garden&quot;'),true);
  assert.equal(html.includes('light.missing'),true);assert.equal(html.includes('checked'),true);
+});
+
+test('prop selection creates typed actions and changing timing or removing a row only edits the draft',async()=>{
+ const {p,calls}=fixture(),view=p._spotsView;
+ view.draft={props:[]};view.render=()=>{};view.updateStatus=()=>{};
+ const choose=(value,checked)=>view.change({dataset:{spList:'props'},value,checked,hasAttribute:()=>false});
+ await choose('switch.clown',true);await choose('button.clown',true);
+ assert.equal(view.draft.props[0].duration,3);assert.equal('duration' in view.draft.props[1],false);
+ view.input({dataset:{spProp:'delay',propId:'button.clown'},value:'1.5'});
+ view.input({dataset:{spProp:'duration',propId:'switch.clown'},value:'4'});
+ assert.equal(view.draft.props[1].delay,1.5);assert.equal(view.draft.props[0].duration,4);
+ await choose('switch.clown',false);
+ assert.equal(view.draft.props.length,1);assert.equal(view.draft.props[0].entity_id,'button.clown');
+ assert.equal(calls.length,0);
+});
+
+test('a never-pressed unknown button remains selectable while unavailable prop devices are disabled',()=>{
+ const {p}=fixture();
+ const html=p._choicePicker('spot:props',[
+  {entity_id:'button.new',name:'New button',state:'unknown'},
+  {entity_id:'button.offline',name:'Offline button',state:'unavailable'},
+  {entity_id:'switch.unknown',name:'Unknown relay',state:'unknown'},
+ ],[],{kind:'props',binding:id=>`data-sp-list="props" value="${id}"`});
+ assert.match(html,/value="button.new"\s*>/);
+ assert.match(html,/value="button.offline"[^>]*disabled/);
+ assert.match(html,/value="switch.unknown"[^>]*disabled/);
+});
+
+test('a silent prop-only spot can be saved without selecting lights or speakers',async()=>{
+ const {p,calls}=fixture(),view=p._spotsView;
+ view.render=()=>{};p._message=()=>{};
+ view.draft={id:'clown',name:'Clown',effects:['fx'],settings:{output:'none',lights:[],speakers:[]},props:[{entity_id:'button.clown',delay:0}]};
+ await view.click({dataset:{spAction:'save'}});
+ assert.equal(p._settings.scare_spots[0].props[0].entity_id,'button.clown');
+ assert.equal(view.draft,null);assert.equal(calls.length,0);
 });

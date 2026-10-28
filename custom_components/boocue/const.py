@@ -1,7 +1,7 @@
 """Shared BooCue values."""
 
 DOMAIN = "boocue"
-VERSION = "1.1.4"
+VERSION = "1.2.0"
 EVENT_STATE = "boocue_state"
 CHANNELS = ("effect", "mood")
 RUNTIME_KEYS = {"lights", "output", "speakers", "volume", "brightness", "speed",

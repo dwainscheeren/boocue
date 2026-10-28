@@ -44,6 +44,15 @@ test('card picker, visual editor and sections sizing are registered',()=>{
  assert.equal(card.getGridOptions().columns,12);assert.equal(card.getGridOptions().rows,'auto');
  assert.ok(registry.has('boocue-card-editor'));assert.equal(context.window.customCards.filter(c=>c.type==='boocue-card').length,1);
 });
+test('idle card keeps Stop all available and explains pending switch cleanup',()=>{
+ const {c,hass}=fixture(),card=new (registry.get('boocue-card'))(),nodes={summary:{textContent:''},'stop-all':{disabled:true}};
+ card._hass=hass;card.client=c;card._config={show_effects:false,show_mood:false,show_queue:false};
+ card.shadowRoot={getElementById:id=>nodes[id]||null,querySelector:()=>null,querySelectorAll:()=>[]};
+ card._paint();assert.equal(nodes['stop-all'].disabled,true);
+ c.status.prop_cleanup_pending=['switch.relay'];card._paint();
+ assert.equal(nodes['stop-all'].disabled,false);assert.match(nodes.summary.textContent,/Stop alles/);
+ c.status.prop_cleanup_pending=[];card._paint();assert.equal(nodes['stop-all'].disabled,true);
+});
 test('multiple cards share one subscription and release browser audio only after the last detaches',async()=>{
  const {hass,connection,calls}=fixture(),a=dashboardClient(hass),b=dashboardClient({...hass});assert.equal(a,b);
  const removeA=a.attach(()=>{}),removeB=b.attach(()=>{});await flush();

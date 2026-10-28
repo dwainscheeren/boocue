@@ -24,10 +24,10 @@ flowchart LR
 1. Open **Mood**, choose the background atmosphere and select its general speaker(s). Start it independently. Leave its light selection empty if it should only provide background sound.
 2. Open **Scare spots → New scare spot**. The editor opens in a dialog (full screen on phones). Name it, for example, **Clown**.
 3. Select the speaker(s) and lights physically beside the clown. Choose one or more foreground effects and random or fixed-order effect selection. Set this spot's volume and brightness.
-4. Optionally select its motion sensor(s), OR/AND matching and cooldown, then save the spot.
+4. Optionally add switches/buttons and their timing under **Switches and buttons**. Select motion sensor(s), OR/AND matching and cooldown if needed, then save the spot.
 5. Repeat for **Witch**, **Ghost** or other locations. Use the Play button to trigger a saved spot, or **Random spot** to choose an available enabled location.
 
-A spot uses HA speakers or lights only. Browser audio remains available for the ordinary mood/effect channels; physical spots and their loops do not need an open browser.
+A spot uses HA speakers or **No sound**. A silent spot can control lights, switches or buttons without a speaker. Select at least one effect to define its timeline. Browser audio remains available for the ordinary mood/effect channels; physical spots and their loops do not need an open browser.
 
 **Edit** opens the same dialog for an existing spot. **Cancel**, the close button or Escape discards the draft and returns to the list. Save errors stay in the dialog so you can correct or retry without losing your changes. Queues and motion rules use the same editor behavior.
 
@@ -37,6 +37,25 @@ The result count shows all selected devices, including selections hidden by your
 
 Spot settings override per-effect speaker routes so that an effect always stays with the selected prop's own lights and speakers. An effect pool can be shared by several spots without changing where each spot plays.
 
+## Switches, relays and buttons
+
+Open **Switches and buttons (optional)** in the spot editor. Search by device name or entity ID, or choose an area. Select up to 16 `switch.*` or `button.*` entities. Each selected device gets its own timing fields:
+
+| Device | Settings and behavior |
+| --- | --- |
+| Switch, relay or smart plug | **Start after** and **On-time**. BooCue sends On at the chosen point, then Off after 0.1–120 seconds, or earlier when the effect ends or is stopped. |
+| Button | **Start after**. BooCue sends one `button.press` command. Buttons have no on-time or generic Off command. An unpressed button with an `unknown` state can still be selected. |
+
+Times are seconds from the audio's requested start and follow the selected spot each time it is played manually, by motion or in a location loop. Device and speaker latency still affect physical synchronization. An action beyond the selected effect's duration is skipped and reported; actions never extend a short clip to meet their configured start time.
+
+For example, pair **Activate clown** with **Press clown**: turn its switch on at 0 seconds for 6 seconds, then press its button at 1 second. A switch that is already on when its action starts is skipped and remains untouched. If only the button is needed, select just that button.
+
+For a pump with a 2.5-second water travel time, schedule its switch 2.5 seconds before the intended splash in the recording. If that sound occurs at 6 seconds, set **Start after** to 3.5 seconds. Set the on-time for the water burst; it will also end when the clip stops. Use a dedicated spot/effect pool when recordings need different timings.
+
+Stop cancels actions that have not started and attempts to turn off switches owned by that run. It waits for an already dispatched command before sending Off, so a late On cannot normally overtake cleanup. Button presses cannot be undone: a prop's firmware determines how long its own sequence runs and whether it has a separate stop control. BooCue does not infer a stop button from the device's name.
+
+Owned switches are recorded separately in HA storage before activation. On the next integration startup, BooCue attempts Off for those recorded switches without resuming the show. If cleanup fails, the panel/card reports it, blocks reuse of that switch and enables **Stop all** to retry. Availability and power/network failures can prevent delivery; configure an independent auto-off limit on pumps or relays that must stop even while HA is offline.
+
 ## One at a time or several together
 
 Use **Concurrent playback**:
@@ -44,7 +63,7 @@ Use **Concurrent playback**:
 - **One scare spot at a time:** a new spot trigger is skipped while another foreground effect or spot is playing. The mood continues independently.
 - **Multiple spots at once:** different spots can play together using their own speakers and lights. Each has its own start, stop, volume and light restoration.
 
-Even in parallel mode, two foreground runs cannot own the same lamp, speaker or overlapping speaker-group member. A busy motion trigger is skipped rather than queued for later. A random manual start tries another available enabled spot. Dedicated hardware for each prop gives the most predictable result.
+Even in parallel mode, two foreground runs cannot own the same lamp, speaker, switch, button or overlapping light/speaker/switch-group member. A busy motion trigger is skipped rather than queued for later. A random manual start tries another available enabled spot. Dedicated hardware for each prop gives the most predictable result.
 
 The background mood can share lights with a spot: its lighting pauses on those lamps while the foreground effect takes priority and resumes afterwards. For overlapping audio on the same speaker, the usual compatible-Sonos announcement rules apply; other players need separate mood/effect destinations.
 

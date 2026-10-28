@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+- Pair HA switches and buttons with scare spots, with searchable choices grouped and filtered by area.
+- Schedule a single button press or a switch pulse relative to the audio start. Switch on-time is limited to 0.1–120 seconds and ends with the effect or Stop.
+- Support silent spots with only prop devices, as well as props combined with speakers, lights, motion triggers and location loops.
+- Protect shared switches, buttons and expanded switch-group members during parallel playback; leave switches that are already on untouched.
+- Cancel delayed actions on Stop, wait for in-flight commands before cleanup, and persist owned switches for cleanup after an HA restart. Failed cleanup is visible and can be retried with Stop all.
+- Keep Stop all available for active scare spots and pending switch cleanup in the panel and dashboard card.
+
 ## 1.1.4
 
 - Fix new scare spots, queues and motion rules failing to open when Home Assistant is accessed over plain HTTP on a local network.

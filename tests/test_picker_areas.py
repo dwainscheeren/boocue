@@ -36,6 +36,24 @@ class PickerAreaTests(unittest.TestCase):
         self.assertEqual(result['players'][0]['area_id'],'hall')
         self.assertEqual(lights['light.unassigned']['area_id'],'')
 
+    def test_switch_and_button_choices_include_area_but_exclude_boocues_own_controls(self):
+        entries={
+            'switch.relay':SimpleNamespace(platform='esphome',area_id='garden',device_id=None),
+            'button.clown':SimpleNamespace(platform='esphome',area_id='garden',device_id=None),
+            'switch.boocue_enabled':SimpleNamespace(platform='boocue'),
+            'button.boocue_stop':SimpleNamespace(platform='boocue'),
+        }
+        states=[self.State('switch.relay','off'),self.State('button.clown','unknown'),
+                self.State('switch.boocue_enabled','on'),self.State('button.boocue_stop','unknown')]
+        hass=SimpleNamespace(states=SimpleNamespace(async_all=lambda:states))
+        with patch.object(self.api.entity_registry,'async_get',return_value=SimpleNamespace(async_get=entries.get)), \
+             patch.object(self.api.device_registry,'async_get',return_value=SimpleNamespace()), \
+             patch.object(self.api.area_registry,'async_get',return_value=SimpleNamespace(async_get_area=lambda key:SimpleNamespace(id='garden',name='Garden'))):
+            result=self.api.entities(hass)
+        self.assertEqual({e['entity_id'] for e in result['props']},{'switch.relay','button.clown'})
+        self.assertTrue(all(e['area_id']=='garden' for e in result['props']))
+        self.assertEqual({e['domain'] for e in result['props']},{'switch','button'})
+
 
 if __name__=='__main__':
     unittest.main()

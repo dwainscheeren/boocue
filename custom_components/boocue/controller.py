@@ -32,6 +32,7 @@ from .models import Cue, number
 from .sequence import validate_queues
 from .queue_manager import QueueManager
 from .spots import SpotManager, validate_spots, validate_spot_show
+from .props import PropManager
 
 LOGGER = logging.getLogger(__name__)
 COLOR_MODES = {"hs", "rgb", "rgbw", "rgbww", "xy"}
@@ -250,6 +251,8 @@ class Playback:
     finished: asyncio.Event = field(default_factory=asyncio.Event)
     announcements: set = field(default_factory=set)
     preview_cue: Cue | None = None
+    prop_actions: list = field(default_factory=list)
+    prop_switches: set = field(default_factory=set)
 
 
 class BooCueController:
@@ -275,6 +278,7 @@ class BooCueController:
         self._browser_station = None
         self.queues = QueueManager(self)
         self.spots = SpotManager(self)
+        self.props = PropManager(self, Store(hass, 1, DOMAIN + '_props'))
 
     @property
     def status(self):
@@ -301,6 +305,7 @@ class BooCueController:
                 "stop_sequence": self._stop_sequence,
                 "settings_revision": self._settings_revision, "library_revision": self._library_revision,
                 "scare_spots": self.spots.status(), "spot_show": deepcopy(self.spots.show_status),
+                "prop_cleanup_pending": sorted(self.props.pending - {e for run in self._runs.values() for e in run.prop_switches}),
                 "browser_ready": bool(self._browser_station), "browser_station_id": self.browser_id}
 
     async def async_load(self):
@@ -313,6 +318,7 @@ class BooCueController:
                 LOGGER.warning("BooCue settings were invalid; using defaults")
                 # A damaged unrelated preference must not bypass a persisted master Off.
                 if stored.get('enabled') is False:self.settings['enabled'] = False
+        await self.props.load()
         self._bind_motion()
 
     async def async_reload_library(self):
@@ -466,6 +472,8 @@ class BooCueController:
                 if expected_run_id and self.channels[name].get("run_id") != expected_run_id:
                     continue
                 await self._stop_locked(name)
+            if channel is None and not expected_run_id:
+                await self.props.retry_pending()
         if channel is None and not expected_run_id:
             # Also cancel local previews/pending decodes in connected panels.
             # Publish after cleanup so old channel state cannot restart browser audio.
@@ -497,7 +505,7 @@ class BooCueController:
         settings = validate_runtime(settings)
         lights = expand_lights(self.hass, settings["lights"])
         output = settings["output"]
-        if not lights and output == "none":
+        if not lights and output == "none" and not (spot and spot.get('props')):
             raise ValueError("Kies minstens één beschikbare lamp of geluidsuitgang")
         if output == "browser" and not browser and (not browser_id or browser_id != self.browser_id):
             raise ValueError("Schakel eerst automatisch browsergeluid in op het BooCue-paneel, of kies HA-speakers.")
@@ -543,12 +551,13 @@ class BooCueController:
                 raise ValueError('Deze HA-speaker kan sfeer en effecten niet tegelijk mengen. Gebruik aparte speakers, dit apparaat, of geschikte Sonos-speakers met aankondigingen.')
         return announcements
 
-    def foreground_busy(self, channel, lights, resources):
+    def foreground_busy(self, channel, lights, resources, prop_actions=()):
         if channel=='mood':return False
         for other in self._runs.values():
             if other.channel in {channel,'mood'}:continue
             if (channel.startswith('spot:') or other.channel.startswith('spot:')) and self.settings['spot_concurrency']=='single':return True
             if set(lights)&set(other.lights) or resources&other.resources:return True
+            if {a['entity_id'] for a in prop_actions} & {a['entity_id'] for a in other.prop_actions}:return True
         return False
 
     async def async_play(self,effect_id,overrides=None,context=None,*,browser=False,browser_id=None,
@@ -558,8 +567,10 @@ class BooCueController:
         browser_id=browser_id or self.browser_id
         settings=self.playback_settings(effect_id,channel,overrides or {})
         effect,settings,lights,players,resources,audio_base=self.prepare_playback(effect_id,settings,channel,browser_id,browser)
+        spot = next((s for s in self.settings['scare_spots'] if channel == 'spot:' + s['id']), None)
+        prop_actions = self.props.prepare(spot.get('props', [])) if spot else []
         output=settings['output']
-        if self.foreground_busy(channel,lights,resources):
+        if self.foreground_busy(channel,lights,resources,prop_actions):
             if if_idle:return None
             raise ValueError('Een andere schrikplek gebruikt deze lampen of speakers, of één plek tegelijk staat aan. Wacht of kies meerdere tegelijk met aparte apparaten.')
         self.check_audio_overlap(channel,players,resources,settings)
@@ -579,12 +590,13 @@ class BooCueController:
                     return None
             if if_idle and self.channels.get(channel,{}).get("playing"):
                 return None
-            if self.foreground_busy(channel,lights,resources):
+            if self.foreground_busy(channel,lights,resources,prop_actions):
                 if if_idle:return None
                 raise ValueError('Een andere schrikplek gebruikt deze apparaten of één plek tegelijk staat aan.')
             announcements=self.check_audio_overlap(channel,players,resources,settings)
             await self._stop_locked(channel)
             self.ensure_enabled()
+            self.props.ensure_released(prop_actions)
             for entity_id in lights:
                 if entity_id not in self._light_snapshots:
                     self._light_snapshots[entity_id] = self.hass.states.get(entity_id)
@@ -602,6 +614,8 @@ class BooCueController:
             run = Playback(channel, effect, settings, context or Context(), lights, players, resources,
                            audio_base, delay, status)
             run.announcements=announcements
+            run.prop_actions=prop_actions
+            status['prop_entities']=[a['entity_id'] for a in prop_actions]
             self._runs[channel] = run
             self.channels[channel] = status
             run.task = self.hass.async_create_task(self._run(run), f"BooCue {channel}")
@@ -701,6 +715,8 @@ class BooCueController:
                     start_delay=run.delay + run.settings["offset_ms"] / 1000, speed=run.settings["speed"],
                     interval=run.settings["interval_ms"] / 1000, repeat=run.settings["repeat"]))
                 group.create_task(self._remote_audio(run))
+                if run.prop_actions:
+                    group.create_task(self.props.play(run))
         except asyncio.CancelledError:
             raise
         except Exception as err:
@@ -716,6 +732,7 @@ class BooCueController:
     async def _cleanup_locked(self, run):
         if self._runs.get(run.channel) is not run:
             return
+        await self.props.cleanup(run)
         # Keep ownership until stop/volume restoration has completed.
         async def finish(player):
             state = self.hass.states.get(player)

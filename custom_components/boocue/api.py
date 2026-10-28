@@ -30,22 +30,24 @@ def entities(hass):
     entity_reg = entity_registry.async_get(hass)
     device_reg = device_registry.async_get(hass)
     areas = area_registry.async_get(hass)
-    result = {"lights": [], "players": [], "sensors": []}
+    result = {"lights": [], "players": [], "sensors": [], "props": []}
     for state in hass.states.async_all():
         domain = state.domain
-        if domain not in {"light", "media_player", "binary_sensor"}:
+        if domain not in {"light", "media_player", "binary_sensor", "switch", "button"}:
             continue
         entry = entity_reg.async_get(state.entity_id)
-        if domain == 'binary_sensor' and entry and entry.platform == DOMAIN:
-            continue  # BooCue's own activity state is not a motion input.
+        if domain in {'binary_sensor', 'switch', 'button'} and entry and entry.platform == DOMAIN:
+            continue  # Never feed BooCue's own controls back into its show.
         device = device_reg.async_get(entry.device_id) if entry and entry.device_id else None
         area_id = (entry.area_id if entry else None) or (device.area_id if device else None)
         area = areas.async_get_area(area_id) if area_id else None
         modes = state.attributes.get("supported_color_modes") or []
-        result[{"light": "lights", "media_player": "players", "binary_sensor": "sensors"}[domain]].append({
+        result[{"light": "lights", "media_player": "players", "binary_sensor": "sensors", "switch": "props", "button": "props"}[domain]].append({
             "entity_id": state.entity_id,
             "name": state.name,
             "state": state.state,
+            "domain": domain,
+            "icon": state.attributes.get('icon') or ({'switch': 'mdi:power', 'button': 'mdi:gesture-tap-button'}.get(domain)),
             "area": area.name if area else "Overige lampen" if domain == "light" else "Overige",
             "area_id": area.id if area else "",
             "color_modes": list(modes),
