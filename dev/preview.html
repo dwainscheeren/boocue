@@ -7,7 +7,7 @@
 <div class="preview-note">UI-ontwikkelvoorbeeld · gesimuleerde lampen · geen verbinding met je apparaten</div>
 <boocue-panel></boocue-panel>
 <script type="module">
-import '/boocue_frontend/boocue-panel.js?build=preview-1.1.3';
+import '/boocue_frontend/boocue-panel.js?build=preview-1.1.4';
 const paths = await (await fetch('/dev/mdi-paths.json')).json();
 customElements.define('ha-icon', class extends HTMLElement {
   connectedCallback() {
@@ -27,7 +27,7 @@ const lights=[
 const runtime={lights:lights.slice(0,2).map(l=>l.entity_id),output:'browser',speakers:[],volume:.6,brightness:.8,speed:1,offset_ms:0,routing:'all',repeat:false,restore:true,interval_ms:250,audio_mode:"auto",duck_mood:.35};
 let settings={...runtime,enabled:true,favorites:[],mood:{...runtime,lights:[],repeat:true,volume:.3,effect_id:null},effect_routes:{},queues:[],motion_rules:[],automatic_enabled:false};
 const channels={effect:{playing:false},mood:{playing:false}},timers={},listeners=new Set();
-let station=null,queue={playing:false},queueTimer,stopSequence=0;
+let station=null,queue={playing:false},queueTimer,stopSequence=0,runSequence=0;
 const status=()=>({enabled:settings.enabled,stop_sequence:stopSequence,playing:queue.playing||Object.values(channels).some(c=>c.playing),channels:structuredClone(channels),queue:structuredClone(queue),browser_ready:!!station,browser_station_id:station,automatic_enabled:settings.automatic_enabled,motion:{}});
 function stopQueue(){clearTimeout(queueTimer);queue.playing=false;queue.waiting=null;}
 async function nextQueue(){
@@ -72,14 +72,14 @@ const hass={locale:{language:'nl'},themes:{darkMode:true},
     if(!settings.enabled)throw new Error('BooCue staat uit. Zet BooCue eerst aan.');
     if(msg.action==='next'){clearTimeout(queueTimer);clearInterval(timers.effect);channels.effect.playing=false;await nextQueue();return structuredClone(queue);}
     const q=settings.queues.find(q=>q.id===msg.queue_id);stopQueue();clearInterval(timers.effect);
-    queue={playing:true,run_id:crypto.randomUUID(),queue_id:q.id,name:q.name,definition:structuredClone(q),step:0,total:q.effects.length,remaining:[],browser_id:station};
+    queue={playing:true,run_id:'preview-'+(++runSequence),queue_id:q.id,name:q.name,definition:structuredClone(q),step:0,total:q.effects.length,remaining:[],browser_id:station};
     await nextQueue();return structuredClone(queue);
   }
   if(msg.type==='boocue/audio')return {url:'/assets/'+effects.find(e=>e.id===msg.effect_id).audio};
   if(msg.type==='boocue/play'){
    if(!settings.enabled)throw new Error('BooCue staat uit. Zet BooCue eerst aan.');
    const channel=msg.channel||'effect',e=effects.find(e=>e.id===msg.effect_id),s=msg.settings;
-   if(channel==='effect'&&!msg.queue_run_id)stopQueue();clearInterval(timers[channel]);channels[channel]={playing:true,channel,run_id:crypto.randomUUID(),effect_id:e.id,title:e.title,duration:e.duration,position:0,cycle:0,start_at:Date.now()/1000+.85,speed:s.speed,repeat:channel==='mood'||s.repeat,lights:s.lights,speakers:s.speakers,output:s.output,brightness:s.brightness,volume:s.volume,duck_mood:s.duck_mood,browser_id:msg.browser_id,queue_run_id:msg.queue_run_id,warnings:0};
+   if(channel==='effect'&&!msg.queue_run_id)stopQueue();clearInterval(timers[channel]);channels[channel]={playing:true,channel,run_id:'preview-'+(++runSequence),effect_id:e.id,title:e.title,duration:e.duration,position:0,cycle:0,start_at:Date.now()/1000+.85,speed:s.speed,repeat:channel==='mood'||s.repeat,lights:s.lights,speakers:s.speakers,output:s.output,brightness:s.brightness,volume:s.volume,duck_mood:s.duck_mood,browser_id:msg.browser_id,queue_run_id:msg.queue_run_id,warnings:0};
    notify();timers[channel]=setInterval(()=>{if(!channels[channel].repeat&&Date.now()/1000>channels[channel].start_at+e.duration){channels[channel].playing=false;clearInterval(timers[channel]);if(channel==='effect'&&channels[channel].queue_run_id)afterQueueItem();}notify()},250);
    return {...structuredClone(channels[channel]),server_time:Date.now()/1000};
   }

@@ -2,10 +2,12 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {webcrypto} from 'node:crypto';
 const registry=new Map();
 const defaults={lights:[],output:'browser',speakers:[],volume:.6,brightness:.8,speed:1,offset_ms:0,routing:'all',repeat:false,restore:true,interval_ms:250,audio_mode:'auto',duck_mood:.35};
 const context=vm.createContext({HTMLElement:class{attachShadow(){this.shadowRoot={};}},localStorage:{getItem:()=>null},
-  URL,customElements:{get:n=>registry.get(n),define:(n,c)=>registry.set(n,c)},Map,Set,structuredClone,Date,Math,performance,Promise});
+  URL,customElements:{get:n=>registry.get(n),define:(n,c)=>registry.set(n,c)},Map,Set,structuredClone,Date,Math,performance,Promise,
+  crypto:{getRandomValues:values=>webcrypto.getRandomValues(values)}});
 vm.runInContext(fs.readFileSync(new URL('../custom_components/boocue/frontend/boocue-panel.js',import.meta.url),'utf8').replace(/^import .*?;\n/,'').replaceAll('import.meta.url',JSON.stringify('http://ha.test/boocue-panel.js?build=test')),context);
 function fixture(){
  const p=new (registry.get('boocue-panel'))();
@@ -20,6 +22,20 @@ function fixture(){
  return {p,calls};
 }
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
+for(const kind of ['spot','queue','rule'])test(`new ${kind} opens a draft on HTTP without crypto.randomUUID or a server request`,async()=>{
+ const {p,calls}=fixture(),rendered=[];
+ p._spotsView.render=options=>rendered.push(options);p._renderQueues=options=>rendered.push(options);p._renderAutomatic=options=>rendered.push(options);
+ const dataset=kind==='spot'?{spAction:'new'}:{action:'new-'+kind};
+ const button={dataset,hasAttribute:()=>false};
+ const ids=new Set();
+ for(let i=0;i<20;i++){
+  await p._onClick({target:{closest:()=>button}});
+  const draft=kind==='spot'?p._spotsView.draft:kind==='queue'?p._queueDraft:p._ruleDraft;
+  assert.match(draft.id,/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  ids.add(draft.id);
+ }
+ assert.equal(ids.size,20);assert.equal(rendered.length,20);assert.equal(calls.length,0);
+});
 test('mood, effect and preview use separate audio sources; preview does not stop shows',async()=>{
  const {p,calls}=fixture();await p._start('mood');await p._start('fx');await p._start('fx',true);
  assert.equal(p._sources.size,3);

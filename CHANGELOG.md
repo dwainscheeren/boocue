@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.4
+
+- Fix new scare spots, queues and motion rules failing to open when Home Assistant is accessed over plain HTTP on a local network.
+- Generate UUIDs with `crypto.getRandomValues`, which works on HTTP as well as HTTPS, and cover all three creation flows with regression tests.
+
 ## 1.1.3
 
 - Search lights, speakers, effects and sensors inside the editors by name, description or entity ID.
