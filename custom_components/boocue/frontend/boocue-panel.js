@@ -8,7 +8,7 @@ class ScareSpotsView {
  get t(){return SPOT_TEXT[this.p._language]||SPOT_TEXT.en;}
  get spots(){return this.p._settings.scare_spots||[];}
  initShow(){if(!this.showDraft){this.showDraft=structuredClone(this.p._settings.spot_show||{spot_ids:[],mode:'random',repeat:true,gap_min:4,gap_max:15});this.useAll=!this.showDraft.spot_ids.length;}}
- choices(items,list,selected){const {esc,icon}=this.h;return `<div class="rule-choices spot-choices">${items.map(item=>{const id=item.entity_id||item.id;return `<label class="check-row"><input type="checkbox" data-sp-list="${list}" value="${esc(id)}" ${selected.includes(id)?'checked':''}>${item.icon?icon(item.icon):''}<span>${esc(item.name||item.title)}${item.area?`<small>${esc(item.area)}</small>`:''}</span></label>`;}).join('')}</div>`;}
+ choices(items,list,selected){return this.p._choicePicker('spot:'+list,items,selected,{kind:list,binding:id=>`data-sp-list="${list}" value="${this.h.esc(id)}"`});}
  render({focus=null,scroll=null}={}){
   const p=this.p;if(p._mode!=='spots')return;
   const root=p.shadowRoot.querySelector('.library');if(!root)return;
@@ -38,8 +38,8 @@ class ScareSpotsView {
  async saveShow(){this.initShow();this.showDraft.spot_ids=this.showDraft.spot_ids.filter(id=>this.spots.some(s=>s.id===id&&s.enabled));if(!this.useAll&&!this.showDraft.spot_ids.length){this.p._message(this.t.chooseOne,true);return false;}this.p._settings.spot_show={...structuredClone(this.showDraft),spot_ids:this.useAll?[]:[...this.showDraft.spot_ids]};return this.p._save();}
  async click(button){
   const p=this.p,t=this.t,a=button.dataset.spAction,id=button.dataset.spId;
-  if(a==='new'){const settings=p._resolved('','effect');this.draft={id:crypto.randomUUID(),name:'',enabled:true,effects:[],mode:'random',sensors:[],match:'any',cooldown:30,settings:{...settings,lights:[],speakers:[],output:'speakers',repeat:false,speed:1}};this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
-  if(a==='edit'){this.draft=structuredClone(this.spots.find(s=>s.id===id));this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
+  if(a==='new'){p._choiceFilters.clear();const settings=p._resolved('','effect');this.draft={id:crypto.randomUUID(),name:'',enabled:true,effects:[],mode:'random',sensors:[],match:'any',cooldown:30,settings:{...settings,lights:[],speakers:[],output:'speakers',repeat:false,speed:1}};this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
+  if(a==='edit'){p._choiceFilters.clear();this.draft=structuredClone(this.spots.find(s=>s.id===id));this.render({focus:'[data-sp-field="name"]',scroll:'start'});return;}
   if(a==='cancel'){p._cancelEditor();return;}
   if(a==='save'){const d=this.draft;if(!d.name.trim()||!d.effects.length||(d.settings.output==='speakers'?!d.settings.speakers.length:!d.settings.lights.length)){p._message(t.noEffects,true);return;}p._settings.scare_spots=this.spots.filter(s=>s.id!==d.id);p._settings.scare_spots.push(structuredClone(d));if(await p._save()){this.draft=null;p._message(t.saved);this.render({focus:`[data-sp-action="edit"][data-sp-id="${CSS.escape(d.id)}"]`});}return;}
   if(a==='remove'){this.deleted=structuredClone(this.spots.find(s=>s.id===id));const previous=structuredClone(p._settings.spot_show);p._settings.scare_spots=this.spots.filter(s=>s.id!==id);if(p._settings.spot_show)p._settings.spot_show.spot_ids=p._settings.spot_show.spot_ids.filter(s=>s!==id);if(await p._save()){this.showDraft=null;p._message(t.removed);const undo=document.createElement('button');undo.className='text-button';undo.dataset.spAction='undo';undo.textContent=t.undo;p.shadowRoot.getElementById('message').append(undo);this.draft=null;this.render();}else p._settings.spot_show=previous;return;}
@@ -239,6 +239,20 @@ const EDITOR_TEXT = {
   en: {spot:['New scare spot','Edit scare spot'],queue:['New queue','Edit queue'],rule:['New motion rule','Edit motion rule'],saving:'Saving…'},
 };
 
+const PICKER_TEXT = {
+  nl:{lights:'Zoek lampen',speakers:'Zoek speakers',effects:'Zoek effecten',sensors:'Zoek sensoren',area:'Ruimte',allAreas:'Alle ruimtes',noArea:'Zonder ruimte',selected:'geselecteerd',results:'resultaten',clear:'Filters wissen',empty:'Geen resultaten. Pas je zoekopdracht of ruimtefilter aan.'},
+  en:{lights:'Search lights',speakers:'Search speakers',effects:'Search effects',sensors:'Search sensors',area:'Area',allAreas:'All areas',noArea:'No area',selected:'selected',results:'results',clear:'Clear filters',empty:'No results. Change your search or area filter.'},
+};
+const normalizeChoice = value => String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase();
+function choiceMatches(text,query) {return normalizeChoice(query).trim().split(/\s+/).every(word=>normalizeChoice(text).includes(word));}
+function choiceArea(item) {return item.area_id!==undefined?(item.area_id||'__no_area__'):(item.area||'__no_area__');}
+function groupChoices(items,language) {
+  const collator=new Intl.Collator(language,{numeric:true,sensitivity:'base'}),groups=new Map();
+  for(const item of items){const key=choiceArea(item);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item);}
+  return [...groups].sort(([a,aa],[b,bb])=>a==='__no_area__'?1:b==='__no_area__'?-1:collator.compare(aa[0].area||a,bb[0].area||b))
+    .map(([key,rows])=>[key,rows.sort((a,b)=>collator.compare(a.name||a.entity_id,b.name||b.entity_id))]);
+}
+
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon = (name) => `<ha-icon icon="${esc(name)}" aria-hidden="true"></ha-icon>`;
 const duration = seconds => `${Math.floor(Math.max(0, seconds) / 60)}:${String(Math.floor(Math.max(0, seconds) % 60)).padStart(2, '0')}`;
@@ -251,6 +265,7 @@ class BooCuePanel extends HTMLElement {
     this._entities = { lights: [], players: [], sensors: [] };
     this._mode = 'effect'; this._modeViews = {}; this._sources = new Map(); this._pending = new Set(); this._generations = {}; this._ruleDraft = null; this._queueDraft = null; this._browserId = null; this._receiving = new Map();
     this._spotsView = new ScareSpotsView(this,{esc,icon});
+    this._choiceFilters = new Map();
     this._settings = {};
     this._status = { playing: false };
     this._category = 'everything';
@@ -410,6 +425,7 @@ class BooCuePanel extends HTMLElement {
     </div>`;
     for (const key of ['output','routing','speed','audio_mode']) this.shadowRoot.getElementById(key).value = String(s[key]);
     this._renderLights(); this._renderEffects(); if (this._mode === 'automatic') this._renderAutomatic(); if(this._mode==='queue')this._renderQueues(); if(this._mode==='spots')this._spotsView.render(); this._renderStatus();
+    for(const picker of this.shadowRoot.querySelectorAll('[data-choice-picker]'))this._filterChoicePicker(picker);
     this._restoreView(view,{focus});
   }
 
@@ -451,6 +467,7 @@ class BooCuePanel extends HTMLElement {
     dialog.querySelector('.editor-actions').replaceChildren(...[...actions.children].reverse());
     actions.remove();
     dialog.querySelector('.editor-body').replaceChildren(form);
+    for(const picker of dialog.querySelectorAll('[data-choice-picker]'))this._filterChoicePicker(picker);
     this._setEditorBusy(!!this._editorSaveCount);
     if(fresh)dialog.showModal();
   }
@@ -471,6 +488,49 @@ class BooCuePanel extends HTMLElement {
     for(const button of dialog.querySelectorAll('.editor-header button,.editor-footer button'))button.disabled=busy;
     dialog.querySelector('.editor-save-status').textContent=busy?EDITOR_TEXT[this._language].saving:'';
     if(busy)dialog.querySelector('.editor-error').hidden=true;
+  }
+
+  _choicePicker(scope,items,selected,{kind='lights',binding,dropdown=false}={}) {
+    const t=PICKER_TEXT[this._language],state=this._choiceFilters.get(scope)||{query:'',area:''},devices=kind!=='effects';
+    const entries=[...items,...selected.filter(id=>!items.some(item=>(item.entity_id||item.id)===id)).map(id=>({entity_id:id,name:id,state:'unavailable',area_id:'',area:''}))];
+    const groups=devices?groupChoices(entries,this._language):[];
+    const areaName=(key,rows)=>key==='__no_area__'?t.noArea:rows[0].area||key;
+    const row=item=>{
+      const id=item.entity_id||item.id,checked=selected.includes(id),unavailable=['unknown','unavailable'].includes(item.state),incapable=kind==='speakers'&&!(item.supported_features&512);
+      const search=[item.name,item.title,id,item.area,item.description,kind==='effects'?this._description(item):''].filter(Boolean).join(' ');
+      const note=unavailable?this.t.unavailable:incapable?this.t.cannotPlay:'';
+      return `<label class="check-row choice-item" data-choice-item data-choice-text="${esc(normalizeChoice(search))}" data-choice-item-area="${esc(choiceArea(item))}"><input type="checkbox" ${binding(id)} ${checked?'checked':''} ${!checked&&(unavailable||incapable)?'disabled':''}>${item.icon?icon(item.icon):''}<span>${esc(item.name||item.title||id)}${note?`<small>${esc(note)}</small>`:''}</span></label>`;
+    };
+    return `<section class="choice-picker" data-choice-picker="${esc(scope)}" data-choice-kind="${kind}"><div class="choice-tools"><label>${t[kind]}<input type="search" data-choice-search="${esc(scope)}" value="${esc(state.query)}" autocomplete="off"></label>${devices?`<label>${t.area}<select data-choice-area="${esc(scope)}"><option value="">${t.allAreas}</option>${groups.map(([key,rows])=>`<option value="${esc(key)}" ${state.area===key?'selected':''}>${esc(areaName(key,rows))}</option>`).join('')}</select></label>`:''}</div>
+      <div class="choice-meta"><span role="status" data-choice-count></span><button class="text-button" data-choice-clear="${esc(scope)}" ${state.query||state.area?'':'hidden'}>${t.clear}</button></div>
+      ${dropdown?`<div class="queue-add"><label>${this.t.addEffect}<select data-queue-add><option value="">${this.t.pickEffect}</option>${items.map(e=>`<option value="${esc(e.id)}">${esc(e.title)}</option>`).join('')}</select></label><button class="secondary-button" data-action="add-queue-effect" disabled>${icon('mdi:plus')}${this.t.add}</button></div>`:`<div class="choice-results rule-choices">${devices?groups.map(([key,rows])=>`<div class="choice-group" data-choice-group><h4>${esc(areaName(key,rows))}</h4><div class="choice-group-items">${rows.map(row).join('')}</div></div>`).join(''):entries.map(row).join('')}</div>`}
+      <p class="choice-empty field-help" hidden>${t.empty}</p></section>`;
+  }
+
+  _filterChoicePicker(picker,resetScroll=false) {
+    if(!picker?.isConnected)return;
+    const scope=picker.dataset.choicePicker,t=PICKER_TEXT[this._language],query=picker.querySelector('[data-choice-search]').value,area=picker.querySelector('[data-choice-area]')?.value||'';
+    this._choiceFilters.set(scope,{query,area});
+    let total=0,visible=0,selected=0;
+    if(scope==='queue-add') {
+      const items=this._effects.filter(e=>e.category!=='moods'),matches=items.filter(e=>choiceMatches([e.title,e.id,e.description,this._description(e)].join(' '),query)),select=picker.querySelector('[data-queue-add]'),value=select.value;
+      select.innerHTML=`<option value="">${this.t.pickEffect}</option>`+matches.map(e=>`<option value="${esc(e.id)}">${esc(e.title)}</option>`).join('');
+      select.value=matches.some(e=>e.id===value)?value:'';
+      picker.querySelector('[data-action="add-queue-effect"]').disabled=!select.value;
+      total=items.length;visible=matches.length;
+    } else {
+      const rows=[...picker.querySelectorAll('[data-choice-item]')];total=rows.length;
+      for(const row of rows){row.hidden=!!(area&&row.dataset.choiceItemArea!==area)||!choiceMatches(row.dataset.choiceText,query);if(!row.hidden)visible++;if(row.querySelector('input').checked)selected++;}
+      for(const group of picker.querySelectorAll('[data-choice-group]'))group.hidden=![...group.querySelectorAll('[data-choice-item]')].some(row=>!row.hidden);
+    }
+    picker.querySelector('[data-choice-count]').textContent=`${visible} / ${total} ${t.results}${scope==='queue-add'?'':` · ${selected} ${t.selected}`}`;
+    picker.querySelector('[data-choice-clear]').hidden=!query&&!area;
+    picker.querySelector('.choice-empty').hidden=visible>0;
+    const results=picker.querySelector('.choice-results');if(results){results.hidden=visible===0;if(resetScroll)results.scrollTop=0;}
+  }
+
+  _choiceFilterInput(target) {
+    const picker=target.closest('[data-choice-picker]');this._filterChoicePicker(picker,true);
   }
 
   _renderLights() {
@@ -530,6 +590,7 @@ class BooCuePanel extends HTMLElement {
       </article>`;
     }).join('') : `<div class="empty"><h3>${this.t.empty}</h3><p>${this._category === 'favorites' ? this.t.noFavorites : this.t.emptyHelp}</p></div>`;
     this.shadowRoot.getElementById('library-count').textContent = `${effects.length} / ${this._effects.length}`;
+    for(const picker of root.querySelectorAll('[data-choice-picker]'))this._filterChoicePicker(picker);
     this._restoreView(view);this._lastLightPaint=0;this._renderLightFeedback();
     for (const b of this.shadowRoot.querySelectorAll('[data-category]')) b.setAttribute('aria-pressed', String(b.dataset.category === this._category));
   }
@@ -537,6 +598,7 @@ class BooCuePanel extends HTMLElement {
   _controlKey(el) {
     if(!el)return null;
     if(el.id)return `#${CSS.escape(el.id)}`;
+    for(const attr of ['data-choice-search','data-choice-area','data-choice-clear'])if(el.hasAttribute(attr))return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
     if(el.hasAttribute('data-speaker-scope'))return `[data-speaker-scope="${CSS.escape(el.dataset.speakerScope)}"][value="${CSS.escape(el.value)}"]`;
     for(const attr of ['data-mode','data-action','data-route-mode','data-route-volume','data-rule-field','data-rule-percent','data-rule-effect','data-rule-light','data-rule-enabled','data-edit-rule','data-remove-rule','data-play','data-preview','data-favorite','data-stop','data-start-queue','data-edit-queue','data-remove-queue','data-queue-field','data-queue-runtime','data-queue-percent','data-rule-sensor','data-queue-add','data-queue-up','data-queue-down','data-queue-remove','data-queue-inherit','data-queue-light','data-queue-item']) {
       if(el.hasAttribute(attr))return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
@@ -566,7 +628,7 @@ class BooCuePanel extends HTMLElement {
     const details=[...root.querySelectorAll('details')].map(el=>({key:this._disclosureKey(el),open:el.open,scroll:el.querySelector('.speaker-list')?.scrollTop}));
     return {focus:this._controlKey(active),selection:typeof active?.selectionStart==='number'?[active.selectionStart,active.selectionEnd]:null,
       scroll:workspace?.scrollTop||0,expanded:root.querySelector('.setup')?.classList.contains('expanded'),details,
-      scrollers:['.editor-body','.light-list','.rule-pool .rule-choices','.rule-lights .rule-choices','.sensor-picker .rule-choices','.rule-effect-choices','.queue-lights .rule-choices'].map(key=>({key,scroll:root.querySelector(key)?.scrollTop||0}))};
+      scrollers:['.editor-body','.light-list','.rule-pool .rule-choices','.rule-lights .rule-choices','.sensor-picker .rule-choices','.rule-effect-choices','.queue-lights .rule-choices',...[...root.querySelectorAll('[data-choice-picker]')].map(p=>`[data-choice-picker="${CSS.escape(p.dataset.choicePicker)}"] .choice-results`)].map(key=>({key,scroll:root.querySelector(key)?.scrollTop||0}))};
   }
 
   _restoreView(view,{focus=null,scroll=null}={}) {
@@ -596,11 +658,8 @@ class BooCuePanel extends HTMLElement {
   }
 
   _speakerPicker(scope,selected=[]) {
-    const t=this.t, players=[...this._entities.players,...selected.filter(id=>!this._entities.players.some(p=>p.entity_id===id)).map(id=>({entity_id:id,name:id,state:'unavailable',area:'',supported_features:0}))];
-    return `<details class="speaker-picker" data-picker-scope="${esc(scope)}"><summary>${selected.length ? `${selected.length} ${t.speakerCount}` : t.emptySelection}</summary><div class="speaker-list">${players.length?players.map(p=>{
-      const unavailable=['unavailable','unknown'].includes(p.state), incapable=!(p.supported_features&512);
-      return `<label class="check-row"><input type="checkbox" data-speaker-scope="${esc(scope)}" value="${esc(p.entity_id)}" ${selected.includes(p.entity_id)?'checked':''} ${(!selected.includes(p.entity_id)&&(unavailable||incapable))?'disabled':''}><span>${esc(p.name)}<small>${esc(p.area)}${unavailable?` · ${t.unavailable}`:incapable?` · ${t.cannotPlay}`:''}</small></span></label>`;
-    }).join(''):`<p>${t.noSpeakers}</p>`}</div><p class="field-help">${t.speakerHint}</p></details>`;
+    const t=this.t;
+    return `<details class="speaker-picker" data-picker-scope="${esc(scope)}"><summary>${selected.length ? `${selected.length} ${t.speakerCount}` : t.emptySelection}</summary>${this._choicePicker('speakers:'+scope,this._entities.players,selected,{kind:'speakers',binding:id=>`data-speaker-scope="${esc(scope)}" value="${esc(id)}"`})}<p class="field-help">${t.speakerHint}</p></details>`;
   }
 
   _routeEditor(effect) {
@@ -831,16 +890,17 @@ class BooCuePanel extends HTMLElement {
   async _onClick(event) {
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
+    if(button.hasAttribute('data-choice-clear')){const picker=button.closest('[data-choice-picker]'),input=picker.querySelector('[data-choice-search]'),area=picker.querySelector('[data-choice-area]');input.value='';if(area)area.value='';this._filterChoicePicker(picker,true);input.focus({preventScroll:true});return;}
     if(button.dataset.action==='close-editor'){this._cancelEditor();return;}
     if(this._editorSaveCount&&(button.dataset.spAction==='save'||['save-queue','save-rule'].includes(button.dataset.action)))return;
     if(button.dataset.spAction){await this._spotsView.click(button);return;}
     if(button.dataset.startQueue)return this._startQueue(button.dataset.startQueue);
-    if(button.dataset.editQueue){this._queueDraft=structuredClone(this._settings.queues.find(q=>q.id===button.dataset.editQueue));this._renderQueues({focus:'[data-queue-field="name"]',scroll:'start'});return;}
+    if(button.dataset.editQueue){this._choiceFilters.clear();this._queueDraft=structuredClone(this._settings.queues.find(q=>q.id===button.dataset.editQueue));this._renderQueues({focus:'[data-queue-field="name"]',scroll:'start'});return;}
     if(button.dataset.removeQueue){const id=button.dataset.removeQueue,previous=structuredClone(this._settings.queues);this._deletedQueue=this._settings.queues.find(q=>q.id===id);this._settings.queues=this._settings.queues.filter(q=>q.id!==id);if(await this._save()){this._queueDraft=null;this._renderQueues();this._message(this.t.removed);const undo=document.createElement('button');undo.className='text-button';undo.dataset.action='undo-queue';undo.textContent=this.t.undo;this.shadowRoot.getElementById('message').append(undo);this._restoreView(null,{focus:'[data-action="undo-queue"]'});}else{this._settings.queues=previous;this._deletedQueue=null;}return;}
     for(const [key,delta] of [['queueUp',-1],['queueDown',1],['queueRemove',0]])if(button.dataset[key]!==undefined){const i=Number(button.dataset[key]),a=this._queueDraft.effects;if(delta)[a[i],a[i+delta]]=[a[i+delta],a[i]];else a.splice(i,1);this._renderQueues({focus:a.length?`[data-queue-item="${Math.min(delta?i+delta:i,a.length-1)}"]`:'[data-queue-add]'});return;}
     if (button.dataset.mode) {this._modeViews[this._mode]=this._captureView();this._mode=button.dataset.mode;this._category='everything';this._query='';const focus=`[data-mode="${this._mode}"]`;this._render({preserve:false,focus});this._restoreView(this._modeViews[this._mode],{focus});return;}
     if (button.dataset.stop) return this._stopChannel(button.dataset.stop);
-    if (button.dataset.editRule) {this._ruleDraft=structuredClone(this._settings.motion_rules.find(r=>r.id===button.dataset.editRule));this._renderAutomatic({focus:'[data-rule-field="name"]',scroll:'start'});return;}
+    if (button.dataset.editRule) {this._choiceFilters.clear();this._ruleDraft=structuredClone(this._settings.motion_rules.find(r=>r.id===button.dataset.editRule));this._renderAutomatic({focus:'[data-rule-field="name"]',scroll:'start'});return;}
     if (button.dataset.removeRule) {this._deletedRule=this._settings.motion_rules.find(r=>r.id===button.dataset.removeRule);this._settings.motion_rules=this._settings.motion_rules.filter(r=>r.id!==button.dataset.removeRule);if(await this._save()){this._renderAutomatic();this._message(this.t.removed);const undo=document.createElement('button');undo.className='text-button';undo.dataset.action='undo-rule';undo.textContent=this.t.undo;this.shadowRoot.getElementById('message').append(undo);this._restoreView(null,{focus:'[data-action="undo-rule"]'});}return;}
     if (button.dataset.play) return this._start(button.dataset.play);
     if (button.dataset.preview) return this._start(button.dataset.preview, true);
@@ -853,7 +913,7 @@ class BooCuePanel extends HTMLElement {
     switch (button.dataset.action) {
       case 'browser-ready':try{await this._ensureBrowserStation();}catch(err){this._message(String(err.message||err),true);}break;
       case 'queue-next':case 'queue-stop':if(button.dataset.action==='queue-stop'){this._queueGeneration=(this._queueGeneration||0)+1;this._pending.delete('queue');}try{this._status.queue=await this._hass.callWS({type:'boocue/queue',action:button.dataset.action==='queue-next'?'next':'stop'});this._renderStatus();}catch(err){this._message(String(err.message||err),true);}break;
-      case 'new-queue':this._queueDraft={id:crypto.randomUUID(),name:'',effects:[],mode:'sequence',advance:'auto',repeat:true,gap_min:4,gap_max:15,settings:{}};this._renderQueues({focus:'[data-queue-field="name"]',scroll:'start'});break;
+      case 'new-queue':this._choiceFilters.clear();this._queueDraft={id:crypto.randomUUID(),name:'',effects:[],mode:'sequence',advance:'auto',repeat:true,gap_min:4,gap_max:15,settings:{}};this._renderQueues({focus:'[data-queue-field="name"]',scroll:'start'});break;
       case 'cancel-queue':this._cancelEditor();break;
       case 'add-queue-effect':{const id=this.shadowRoot.querySelector('[data-queue-add]').value;if(id&&this._queueDraft.effects.length<100){this._queueDraft.effects.push(id);this._renderQueues({focus:'[data-queue-add]'});}break;}
       case 'save-queue':{const q=this._queueDraft;if(!q.name.trim()||!q.effects.length){this._message(this.t.queueRequired,true);break;}const i=this._settings.queues.findIndex(item=>item.id===q.id);if(i<0)this._settings.queues.push(structuredClone(q));else this._settings.queues[i]=structuredClone(q);if(await this._save()){this._queueDraft=null;this._renderQueues({focus:`[data-edit-queue="${CSS.escape(q.id)}"]`,scroll:'nearest'});this._message(this.t.queueSaved);}break;}
@@ -889,6 +949,7 @@ class BooCuePanel extends HTMLElement {
       case 'stop-preview': this._generations.preview=(this._generations.preview||0)+1;this._pending.delete('preview');this._stopAudio('preview');this._renderStatus();break;
       case 'undo-queue':if(this._deletedQueue){const id=this._deletedQueue.id;this._settings.queues.push(this._deletedQueue);if(await this._save()){this._deletedQueue=null;this.shadowRoot.getElementById('message').hidden=true;this._renderQueues({focus:`[data-edit-queue="${CSS.escape(id)}"]`,scroll:'nearest'});}}break;
       case 'new-rule': {
+        this._choiceFilters.clear();
         const settings=this._resolved('', 'effect');
         this._ruleDraft={...settings,id:crypto.randomUUID(),name:'',sensor:'',sensors:[],match:'any',action:'effect',queue_id:null,effects:[],cooldown:30,mode:'random',enabled:true};this._renderAutomatic({focus:'[data-rule-field="name"]',scroll:'start'});break;
       }
@@ -912,7 +973,7 @@ class BooCuePanel extends HTMLElement {
 
   _sensorPicker(rule) {
     const selected=rule.sensors||[rule.sensor].filter(Boolean);
-    return `<details class="sensor-picker" data-sensor-picker="true"><summary>${selected.length} ${this.t.selectedSensors}</summary><div class="rule-choices">${this._entities.sensors.map(sensor=>`<label class="check-row"><input type="checkbox" data-rule-sensor="${esc(sensor.entity_id)}" ${selected.includes(sensor.entity_id)?'checked':''}><span>${esc(sensor.name)}<small>${esc(sensor.area)}</small></span></label>`).join('')}</div></details>`;
+    return `<details class="sensor-picker" data-sensor-picker="true"><summary>${selected.length} ${this.t.selectedSensors}</summary>${this._choicePicker('rule:sensors',this._entities.sensors,selected,{kind:'sensors',binding:id=>`data-rule-sensor="${esc(id)}"`})}</details>`;
   }
 
   _renderAutomatic({focus=null,scroll=null}={}) {
@@ -925,11 +986,11 @@ class BooCuePanel extends HTMLElement {
       <fieldset class="rule-pool"><legend>${t.sensors}</legend>${this._sensorPicker(r)}${r.sensors.length?`<p class="field-help">${r.sensors.map(id=>esc(this._entities.sensors.find(s=>s.entity_id===id)?.name||id)).join(' · ')}</p>`:''}</fieldset>
       <div class="rule-fields"><label>${t.sensorLogic}<select data-rule-field="match"><option value="any" ${r.match==='any'?'selected':''}>${t.anySensor}</option><option value="all" ${r.match==='all'?'selected':''}>${t.allSensors}</option></select></label><label>${t.motionAction}<select data-rule-field="action">${[['effect',t.playOne],['start_queue',t.startSelectedQueue],['next_queue',t.nextSelectedQueue]].map(([v,l])=>`<option value="${v}" ${r.action===v?'selected':''}>${l}</option>`).join('')}</select></label></div><p class="field-help">${t.sensorLogicHelp}</p>
       ${r.action!=='effect'?`<label>${t.chooseQueue}<select data-rule-field="queue_id"><option value="">${t.chooseQueue}</option>${queueOptions}</select></label><p class="field-help">${t.queueRuleHelp}</p>`:`
-      <fieldset class="rule-pool"><legend>${t.pool}</legend><div class="rule-choices rule-effect-choices">${this._effects.filter(e=>e.category!=='moods').map(e=>`<label class="check-row"><input type="checkbox" data-rule-effect="${esc(e.id)}" ${r.effects.includes(e.id)?'checked':''}>${esc(e.title)}</label>`).join('')}</div></fieldset>
+      <fieldset class="rule-pool"><legend>${t.pool}</legend>${this._choicePicker('rule:effects',this._effects.filter(e=>e.category!=='moods'),r.effects,{kind:'effects',binding:id=>`data-rule-effect="${esc(id)}"`})}</fieldset>
       <label>${t.selection}<select data-rule-field="mode"><option value="random" ${r.mode==='random'?'selected':''}>${t.random}</option><option value="sequence" ${r.mode==='sequence'?'selected':''}>${t.sequence}</option></select></label>
       <label>${t.ruleOutput}<select data-rule-field="output">${[['browser',t.browser],['speakers',t.speakers],['none',t.silent]].map(([v,l])=>`<option value="${v}" ${r.output===v?'selected':''}>${l}</option>`).join('')}</select></label>${r.output==='speakers'?this._speakerPicker('rule',r.speakers):r.output==='browser'?`<p class="field-help">${t.browserHelp}</p>`:''}
       <div class="rule-fields"><label>${t.ruleVolume} (%)<input data-rule-percent="volume" type="number" min="0" max="100" value="${Math.round(r.volume*100)}"></label><label>${t.brightness} (%)<input data-rule-percent="brightness" type="number" min="1" max="100" value="${Math.round(r.brightness*100)}"></label></div>
-      <details class="rule-lights"><summary>${t.ruleLights} · ${r.lights.length} ${t.selected}</summary><div class="rule-choices">${this._entities.lights.map(l=>`<label class="check-row"><input type="checkbox" data-rule-light="${esc(l.entity_id)}" ${r.lights.includes(l.entity_id)?'checked':''}>${esc(l.name)}</label>`).join('')}</div></details>`}
+      <details class="rule-lights"><summary>${t.ruleLights} · ${r.lights.length} ${t.selected}</summary>${this._choicePicker('rule:lights',this._entities.lights,r.lights,{kind:'lights',binding:id=>`data-rule-light="${esc(id)}"`})}</details>`}
       <label>${t.cooldown}<input data-rule-field="cooldown" type="number" min="0" max="3600" value="${r.cooldown}"></label><p class="field-help">${t.cooldownHelp}</p>
       <label class="check-row"><input type="checkbox" data-rule-field="enabled" ${r.enabled?'checked':''}>${t.enabled}</label><div class="rule-actions"><button class="stop-button" data-action="save-rule">${t.saveRule}</button><button class="secondary-button" data-action="cancel-rule">${t.cancel}</button></div></section>`:''}
       <div class="motion-rules">${this._settings.motion_rules.length?this._settings.motion_rules.map(rule=>`<article class="motion-rule"><div><h3>${esc(rule.name)}</h3><p>${(rule.sensors||[rule.sensor]).length} ${t.sensors.toLowerCase()} · ${rule.match==='all'?'AND':'OR'} · ${rule.action==='effect'?`${rule.effects.length} ${t.effectMode.toLowerCase()}`:esc(this._settings.queues.find(q=>q.id===rule.queue_id)?.name||rule.queue_id)} · ${rule.cooldown}s</p><p data-rule-status="${esc(rule.id)}"></p></div><label class="check-row"><input type="checkbox" data-rule-enabled="${esc(rule.id)}" ${rule.enabled?'checked':''}>${t.enabled}</label><div class="rule-actions"><button class="text-button" data-edit-rule="${esc(rule.id)}">${t.edit}</button><button class="text-button" data-remove-rule="${esc(rule.id)}">${t.remove}</button></div></article>`).join(''):`<div class="empty" ${r?'hidden':''}><h3>${t.noRules}</h3><p>${t.noRulesHelp}</p></div>`}</div>
@@ -947,11 +1008,11 @@ class BooCuePanel extends HTMLElement {
       <div class="rule-fields" ${q.advance==='motion'?'hidden':''}><label>${t.gapMin}<input data-queue-field="gap_min" type="number" min="0" max="3600" value="${q.gap_min}"></label><label>${t.gapMax}<input data-queue-field="gap_max" type="number" min="0" max="3600" value="${q.gap_max}"></label></div>
       <label class="check-row"><input data-queue-field="repeat" type="checkbox" ${q.repeat?'checked':''}>${t.queueRepeat}</label>
       <h3>${t.queueItems}</h3><ol class="queue-items">${q.effects.length?q.effects.map((id,i)=>{const e=this._effects.find(e=>e.id===id);return `<li tabindex="-1" data-queue-item="${i}"><span class="queue-index">${i+1}</span><strong>${esc(e?.title||id)}</strong><span class="queue-item-actions"><button class="icon-button small" data-queue-up="${i}" aria-label="${t.moveUp}: ${esc(e?.title||id)}" ${i===0?'disabled':''}>${icon('mdi:arrow-up')}</button><button class="icon-button small" data-queue-down="${i}" aria-label="${t.moveDown}: ${esc(e?.title||id)}" ${i===q.effects.length-1?'disabled':''}>${icon('mdi:arrow-down')}</button><button class="icon-button small" data-queue-remove="${i}" aria-label="${t.removeItem}: ${esc(e?.title||id)}">${icon('mdi:close')}</button></span></li>`;}).join(''):`<li class="empty-queue">${t.queueDraftEmpty}</li>`}</ol>
-      <div class="queue-add"><label>${t.addEffect}<select data-queue-add="true"><option value="">${t.pickEffect}</option>${this._effects.filter(e=>e.category!=='moods').map(e=>`<option value="${esc(e.id)}">${esc(e.title)}</option>`).join('')}</select></label><button class="secondary-button" data-action="add-queue-effect">${icon('mdi:plus')}${t.add}</button></div>
+      ${this._choicePicker('queue-add',this._effects.filter(e=>e.category!=='moods'),[],{kind:'effects',dropdown:true})}
       <details class="queue-options"><summary>${t.queueSettings}</summary><label>${t.queueId}<input id="queue-id" readonly value="${esc(q.id)}"></label><label class="check-row"><input data-queue-inherit="true" type="checkbox" ${!Object.keys(q.settings).length?'checked':''}>${t.useDefaults}</label><p class="field-help">${t.queueSettingsHelp}</p>${Object.keys(q.settings).length?`
       <label>${t.output}<select data-queue-runtime="output">${[['browser',t.browser],['speakers',t.speakers],['none',t.silent]].map(([v,l])=>`<option value="${v}" ${q.settings.output===v?'selected':''}>${l}</option>`).join('')}</select></label>${q.settings.output==='speakers'?this._speakerPicker('queue',q.settings.speakers):''}
       <div class="rule-fields"><label>${t.volume} (%)<input data-queue-percent="volume" type="number" min="0" max="100" value="${Math.round(q.settings.volume*100)}"></label><label>${t.brightness} (%)<input data-queue-percent="brightness" type="number" min="1" max="100" value="${Math.round(q.settings.brightness*100)}"></label></div>
-      <details class="queue-lights"><summary>${t.lights} · ${q.settings.lights.length} ${t.selected}</summary><div class="rule-choices">${this._entities.lights.map(l=>`<label class="check-row"><input type="checkbox" data-queue-light="${esc(l.entity_id)}" ${q.settings.lights.includes(l.entity_id)?'checked':''}>${esc(l.name)}</label>`).join('')}</div></details>`:''}</details>
+      <details class="queue-lights"><summary>${t.lights} · ${q.settings.lights.length} ${t.selected}</summary>${this._choicePicker('queue:lights',this._entities.lights,q.settings.lights,{kind:'lights',binding:id=>`data-queue-light="${esc(id)}"`})}</details>`:''}</details>
       <div class="rule-actions"><button class="stop-button" data-action="save-queue">${t.saveQueue}</button><button class="secondary-button" data-action="cancel-queue">${t.cancel}</button></div></section>`:''}
       <div class="queue-list">${this._settings.queues.length?this._settings.queues.map(item=>`<article class="motion-rule" data-queue-row="${esc(item.id)}"><div><h3>${esc(item.name)}</h3><p>${item.effects.length} ${t.effectMode.toLowerCase()} · ${item.mode==='random'?t.random:t.sequence} · ${item.advance==='motion'?t.onMotion:`${item.gap_min}–${item.gap_max}s`}</p></div><div class="rule-actions"><button class="secondary-button" data-start-queue="${esc(item.id)}">${icon('mdi:play')}${t.startQueue}</button><button class="text-button" data-edit-queue="${esc(item.id)}">${t.edit}</button><button class="text-button" data-remove-queue="${esc(item.id)}">${t.remove}</button></div></article>`).join(''):`<div class="empty" ${q?'hidden':''}><h3>${t.noQueues}</h3><p>${t.noQueuesHelp}</p></div>`}</div>`;
     this._syncEditor('queue',q,view);this._renderStatus();this._restoreView(view,{focus,scroll});
@@ -1012,6 +1073,7 @@ class BooCuePanel extends HTMLElement {
 
   _onInput(event) {
     const target = event.target;
+    if(target.hasAttribute('data-choice-search')){this._choiceFilterInput(target);return;}
     if(Object.keys(target.dataset).some(k=>k.startsWith('sp'))&&!target.dataset.speakerScope){this._spotsView.input(target);return;}
     if(target.dataset.queueField&&target.type!=='checkbox'&&target.tagName!=='SELECT'){const k=target.dataset.queueField;this._queueDraft[k]=['gap_min','gap_max'].includes(k)?Number(target.value):target.value;}
     if(target.dataset.queuePercent)this._queueDraft.settings[target.dataset.queuePercent]=Number(target.value)/100;
@@ -1029,18 +1091,21 @@ class BooCuePanel extends HTMLElement {
 
   async _onChange(event) {
     const target = event.target;
-    if(Object.keys(target.dataset).some(k=>k.startsWith('sp'))&&!target.dataset.speakerScope){await this._spotsView.change(target);return;}
+    if(target.hasAttribute('data-choice-area')||target.hasAttribute('data-choice-search')){this._choiceFilterInput(target);return;}
+    if(target.hasAttribute('data-queue-add')){this._filterChoicePicker(target.closest('[data-choice-picker]'));return;}
+    if(Object.keys(target.dataset).some(k=>k.startsWith('sp'))&&!target.dataset.speakerScope){await this._spotsView.change(target);this._filterChoicePicker(target.closest('[data-choice-picker]'));return;}
     if(target.dataset.duck){this._runtime().duck_mood=Number(target.value)/100;this._save();this._updateDuck();
     }else if(target.dataset.queueField){const k=target.dataset.queueField;this._queueDraft[k]=target.type==='checkbox'?target.checked:['gap_min','gap_max'].includes(k)?Number(target.value):target.value;if(k==='advance')this._renderQueues();
     }else if(target.dataset.queueInherit){this._queueDraft.settings=target.checked?{}:Object.fromEntries(RUNTIME_KEYS.map(k=>[k,structuredClone(this._settings[k])]));this._renderQueues();
     }else if(target.dataset.queueRuntime){this._queueDraft.settings[target.dataset.queueRuntime]=target.value;this._renderQueues();
     }else if(target.dataset.queuePercent){this._queueDraft.settings[target.dataset.queuePercent]=Number(target.value)/100;
-    }else if(target.dataset.queueLight){const a=this._queueDraft.settings.lights;this._queueDraft.settings.lights=target.checked?[...new Set([...a,target.dataset.queueLight])].slice(0,32):a.filter(id=>id!==target.dataset.queueLight);
+    }else if(target.dataset.queueLight){const a=this._queueDraft.settings.lights;this._queueDraft.settings.lights=target.checked?[...new Set([...a,target.dataset.queueLight])].slice(0,32):a.filter(id=>id!==target.dataset.queueLight);target.checked=this._queueDraft.settings.lights.includes(target.dataset.queueLight);target.closest('.queue-lights').querySelector('summary').textContent=`${this.t.lights} · ${this._queueDraft.settings.lights.length} ${this.t.selected}`;
     }else if(target.dataset.ruleSensor){const a=this._ruleDraft.sensors;this._ruleDraft.sensors=target.checked?[...new Set([...a,target.dataset.ruleSensor])].slice(0,16):a.filter(id=>id!==target.dataset.ruleSensor);this._ruleDraft.sensor=this._ruleDraft.sensors[0]||'';this._renderAutomatic();
     }else if(target.dataset.speakerScope) {
       const scope=target.dataset.speakerScope;
       const object=scope==='stage'?this._runtime():scope==='rule'?this._ruleDraft:scope==='queue'?this._queueDraft.settings:this._settings.effect_routes[scope.slice(6)];
       object.speakers=target.checked?[...new Set([...object.speakers,target.value])].slice(0,16):object.speakers.filter(p=>p!==target.value);
+      target.checked=object.speakers.includes(target.value);
       const picker=target.closest('.speaker-picker');picker.querySelector('summary').textContent=object.speakers.length?`${object.speakers.length} ${this.t.speakerCount}`:this.t.emptySelection;
       if(scope.startsWith('route:')){const summary=target.closest('.route-editor').querySelector('summary');summary.innerHTML=`${icon('mdi:speaker-multiple')}${object.speakers.length} ${this.t.speakerCount}`;}
       if(!['rule','queue'].includes(scope))this._save();
@@ -1056,7 +1121,7 @@ class BooCuePanel extends HTMLElement {
     } else if(target.dataset.rulePercent){this._ruleDraft[target.dataset.rulePercent]=Number(target.value)/100;
     } else if(target.dataset.ruleField){const key=target.dataset.ruleField;this._ruleDraft[key]=target.type==='checkbox'?target.checked:['cooldown','volume','brightness'].includes(key)?Number(target.value):target.value;if(['output','action'].includes(key))this._renderAutomatic();
     } else if(target.dataset.ruleEffect){this._ruleDraft.effects=target.checked?[...new Set([...this._ruleDraft.effects,target.dataset.ruleEffect])]:this._ruleDraft.effects.filter(id=>id!==target.dataset.ruleEffect);
-    } else if(target.dataset.ruleLight){this._ruleDraft.lights=target.checked?[...new Set([...this._ruleDraft.lights,target.dataset.ruleLight])].slice(0,32):this._ruleDraft.lights.filter(id=>id!==target.dataset.ruleLight);
+    } else if(target.dataset.ruleLight){this._ruleDraft.lights=target.checked?[...new Set([...this._ruleDraft.lights,target.dataset.ruleLight])].slice(0,32):this._ruleDraft.lights.filter(id=>id!==target.dataset.ruleLight);target.checked=this._ruleDraft.lights.includes(target.dataset.ruleLight);target.closest('.rule-lights').querySelector('summary').textContent=`${this.t.ruleLights} · ${this._ruleDraft.lights.length} ${this.t.selected}`;
     } else if (target.dataset.light) {
       this._runtime().lights = target.checked ? [...new Set([...this._runtime().lights, target.dataset.light])].slice(0,32) : this._runtime().lights.filter(x => x !== target.dataset.light);
       this._renderLights(); this._save();
@@ -1077,6 +1142,7 @@ class BooCuePanel extends HTMLElement {
       } catch (err) { this._message(String(err.message || err), true); }
       finally { if (button.isConnected) { button.disabled = false; button.textContent = this.t.import; } }
     }
+    this._filterChoicePicker(target.closest('[data-choice-picker]'));
   }
 }
 

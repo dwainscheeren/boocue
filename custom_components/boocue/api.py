@@ -47,6 +47,7 @@ def entities(hass):
             "name": state.name,
             "state": state.state,
             "area": area.name if area else "Overige lampen" if domain == "light" else "Overige",
+            "area_id": area.id if area else "",
             "color_modes": list(modes),
             "device_class": state.attributes.get("device_class"),
             "supported_features": state.attributes.get("supported_features", 0),

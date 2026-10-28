@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.3
+
+- Search lights, speakers, effects and sensors inside the editors by name, description or entity ID.
+- Filter device choices by Home Assistant area and scan devices grouped under area headings.
+- Keep selected devices across searches, area filters and form changes; show matching-result and selection counts.
+- Search the queue's effect selector without changing effects already in the queue.
+
 ## 1.1.2
 
 - Create and edit scare spots, queues and motion rules in focused dialogs with a fixed action bar.

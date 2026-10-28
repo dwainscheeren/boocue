@@ -31,6 +31,10 @@ A spot uses HA speakers or lights only. Browser audio remains available for the 
 
 **Edit** opens the same dialog for an existing spot. **Cancel**, the close button or Escape discards the draft and returns to the list. Save errors stay in the dialog so you can correct or retry without losing your changes. Queues and motion rules use the same editor behavior.
 
+Use **Search lights**, **Search speakers** or **Search effects** to narrow the choices. Search also matches entity IDs and area names. Lights and speakers are grouped by their Home Assistant area; the **Area** selector shows one area's devices. Sensor choices support the same search and area filters.
+
+The result count shows all selected devices, including selections hidden by your current filter. **Clear filters** shows every choice again without deselecting anything. Filters stay in place while you adjust other settings in the same editor. Queue and motion-rule editors offer the same device filters and effect search.
+
 Spot settings override per-effect speaker routes so that an effect always stays with the selected prop's own lights and speakers. An effect pool can be shared by several spots without changing where each spot plays.
 
 ## One at a time or several together

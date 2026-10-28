@@ -246,3 +246,30 @@ test('a failed editor save keeps the draft, blocks dismissal while pending and u
  assert.equal(p._settings.queues.length,0);assert.deepEqual(busy,[true,false]);assert.deepEqual(errors,['Connection lost']);
  assert.deepEqual(Object.keys(calls[0].settings),['queues']);
 });
+
+test('picker search matches combined words, entity ids and accents without changing the source',()=>{
+ const rows=[{entity_id:'light.garage_spot_2',name:'Café spot',area:'Garage'},{entity_id:'light.hall',name:'Hall',area:'Entry'}];
+ const original=JSON.stringify(rows),selected=['light.hall'];
+ const result=rows.filter(item=>context.choiceMatches(`${item.name} ${item.entity_id} ${item.area}`,'cafe garage'));
+ assert.equal(result.length,1);assert.equal(result[0].entity_id,'light.garage_spot_2');
+ assert.equal(context.choiceMatches('Lamp light.garage_spot_2','garage_spot'),true);
+ assert.equal(context.choiceMatches('Lamp','   '),true);assert.equal(context.choiceMatches('Lamp','ghost'),false);
+ assert.equal(JSON.stringify(rows),original);assert.deepEqual(selected,['light.hall']);
+});
+
+test('area grouping uses stable HA ids, naturally sorts names and keeps unassigned devices last',()=>{
+ const rows=[{entity_id:'light.z',name:'Spot 10',area:'Garden',area_id:'garden'},{entity_id:'light.a',name:'Spot 2',area:'Garden',area_id:'garden'},{entity_id:'light.b',name:'Entry',area:'Entry',area_id:'entry'},{entity_id:'light.c',name:'Unknown',area:'Overige lampen',area_id:''}];
+ const original=JSON.stringify(rows),groups=context.groupChoices(rows,'en');
+ assert.equal(groups.length,3);assert.equal(groups[0][0],'entry');assert.equal(groups[1][0],'garden');
+ assert.equal(groups[1][1][0].name,'Spot 2');assert.equal(groups[2][0],'__no_area__');
+ assert.equal(JSON.stringify(rows),original);
+ assert.equal(context.choiceArea({area:'Hall'}),'Hall');
+});
+
+test('picker markup escapes device names, area labels and search text while retaining missing selections',()=>{
+ const {p}=fixture();p._choiceFilters.set('spot:lights',{query:'"<search>',area:'a'});
+ const html=p._choicePicker('spot:lights',[{entity_id:'light.one',name:'<Lamp>',area:'"Garden"',area_id:'a',state:'on'}],['light.missing'],{kind:'lights',binding:id=>`data-rule-light="${id}"`});
+ assert.equal(html.includes('<Lamp>'),false);assert.equal(html.includes('&lt;Lamp&gt;'),true);
+ assert.equal(html.includes('&quot;&lt;search&gt;'),true);assert.equal(html.includes('&quot;Garden&quot;'),true);
+ assert.equal(html.includes('light.missing'),true);assert.equal(html.includes('checked'),true);
+});
