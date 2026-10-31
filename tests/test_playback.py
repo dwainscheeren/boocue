@@ -174,6 +174,20 @@ class PlaybackTests(PlaybackFixture):
                 for key, value in originals.items():
                     self.assertEqual(self.states[key], value)
 
+    async def test_light_delay_can_save_three_seconds_and_rejects_values_outside_bounds(self):
+        for offset in (-2000, 2500, 3000):
+            with self.subTest(offset=offset):
+                await self.c.async_save_settings({'offset_ms': offset})
+                self.assertEqual(self.c.settings['offset_ms'], offset)
+        await self.c.async_save_settings({'mood': {'offset_ms': 3000}})
+        self.assertEqual(self.c.settings['mood']['offset_ms'], 3000)
+        for offset in (-2001, 3001):
+            with self.subTest(offset=offset), self.assertRaisesRegex(ValueError, 'offset_ms'):
+                await self.c.async_save_settings({'offset_ms': offset})
+        self.assertEqual(self.c.settings['offset_ms'], 3000)
+        with self.assertRaisesRegex(ValueError, 'interval_ms'):
+            await self.c.async_save_settings({'interval_ms': 2001})
+
     async def test_per_effect_route_and_legacy_output_migrate_without_losing_settings(self):
         settings=self.module.validate_settings({'output':'media_player.one','favorites':['fx']},self.c.settings,set(self.c.effects))
         self.assertEqual(settings['output'],'speakers');self.assertEqual(settings['speakers'],['media_player.one'])

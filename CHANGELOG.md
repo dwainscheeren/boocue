@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Allow light delays up to 3000 ms in the panel, saved settings and Home Assistant action selector. The minimum remains -2000 ms.
+
 ## 1.2.0
 
 - Pair HA switches and buttons with scare spots, with searchable choices grouped and filtered by area.

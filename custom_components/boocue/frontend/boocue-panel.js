@@ -424,7 +424,7 @@ class BooCuePanel extends HTMLElement {
             <label for="audio_mode">${t.audioMode}</label><select id="audio_mode" data-setting="audio_mode"><option value="auto">${t.mixAuto}</option><option value="separate">${t.mixSeparate}</option></select><p>${t.mixHelp}</p>
             <label for="duck_mood">${t.duck} (%)</label><input id="duck_mood" data-duck="true" type="number" min="0" max="100" step="1" value="${Math.round(s.duck_mood*100)}">
             <label for="speed">${t.speed}</label><select id="speed" data-setting="speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1">1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
-            <label for="offset_ms">${t.offset} (ms)</label><input id="offset_ms" data-setting="offset_ms" type="number" min="-2000" max="2000" step="50" value="${s.offset_ms}"><p>${t.offsetHelp}</p>
+            <label for="offset_ms">${t.offset} (ms)</label><input id="offset_ms" data-setting="offset_ms" type="number" min="-2000" max="3000" step="50" value="${s.offset_ms}"><p>${t.offsetHelp}</p>
             <label for="interval_ms">${t.interval} (ms)</label><input id="interval_ms" data-setting="interval_ms" type="number" min="100" max="2000" step="50" value="${s.interval_ms}">
           </details><p class="next-note">${t.next}</p>
         </aside>

@@ -53,7 +53,7 @@ def validate_runtime(raw):
     result["lights"] = entity_list(result["lights"], "light", 32)
     result["speakers"] = entity_list(result["speakers"], "media_player", 16)
     for key, lo, hi in [("volume", 0, 1), ("brightness", .01, 1), ("speed", .5, 2),
-                        ("offset_ms", -2000, 2000), ("interval_ms", 100, 2000), ("duck_mood", 0, 1)]:
+                        ("offset_ms", -2000, 3000), ("interval_ms", 100, 2000), ("duck_mood", 0, 1)]:
         result[key] = number(result[key], lo, hi, key)
     if result["routing"] not in {"all", "alternate", "random"}:
         raise ValueError("Ongeldige lampverdeling")
